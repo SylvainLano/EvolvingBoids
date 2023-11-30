@@ -1,0 +1,136 @@
+<div class="main-container">
+    <div class="boid-container">
+        <app-boid *ngFor="let boid of boids.concat(predators)"
+            [position]="boid.position"
+            [velocity]="boid.velocity"
+            [isPredator]="boid.isPredator"
+            [isDead]="boid.isDead"
+            [isEvolved]="boid.isEvolved"
+            [alpha]="boid.alpha"
+        ></app-boid>
+    </div>
+</div>
+
+<div class="display-container">
+    <div class="form-container" (click)="handleFormClick($event)">
+        <form>
+            Click to add a
+            <label>
+                <input type="radio" [(ngModel)]="addOnClick" value="predator" name="addOnClick"> Predator
+            </label>
+            <label>
+                <input type="radio" [(ngModel)]="addOnClick" value="boid" name="addOnClick"> Boid
+            </label>
+            <br />
+            -> <a (click)="toggleOptions()" id="toggleOptionsButton">Show Options</a>
+            <div class="hidden-options" *ngIf="optionsVisible" id="hiddenOptions">
+                <div>
+                    <p class="slider-p boids">
+                        Boids Reproduction Modif :
+                        <mat-slider [(ngModel)]="boidReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
+                        name="boidReproductionModificator" ngDefaultControl>
+                        <input matSliderThumb [value]="boidReproductionModificator">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p boids">
+                        Boids Reproduction Chances % :
+                        <mat-slider [(ngModel)]="boidReproductionChances" min="0" max="100" step="5" showTickMarks discrete
+                        name="boidReproductionChances" ngDefaultControl>
+                        <input matSliderThumb [value]="boidReproductionChances">
+                        </mat-slider>
+                    </p>
+                    <p class="option boids">
+                        Fleeing a Predator resets nesting time :
+                        <input type="checkbox" [(ngModel)]="fleeReset" name="fleeReset">
+                    </p>
+                    <p class="slider-p boids">
+                        Boids Evolution Chances % :
+                        <mat-slider [(ngModel)]="boidEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
+                        name="boidEvolutionChances" ngDefaultControl>
+                        <input matSliderThumb [value]="boidEvolutionChances">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p boids">
+                        Boids Max Evolution % :
+                        <mat-slider [(ngModel)]="boidEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
+                        name="boidEvolutionCap" ngDefaultControl>
+                        <input matSliderThumb [value]="boidEvolutionCap">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p boids">
+                        Alignment Radius in px :
+                        <mat-slider [(ngModel)]="alignmentRadius" min="10" max="200" step="5" showTickMarks discrete
+                        name="alignmentRadius" ngDefaultControl>
+                        <input matSliderThumb [value]="alignmentRadius">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p boids">
+                        Cohesion Radius in px :
+                        <mat-slider [(ngModel)]="cohesionRadius" min="10" max="200" step="5" showTickMarks discrete
+                        name="cohesionRadius" ngDefaultControl>
+                        <input matSliderThumb [value]="cohesionRadius">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p boids">
+                        Separation Radius in px :
+                        <mat-slider [(ngModel)]="boidsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
+                        name="boidsSeparationRadius" ngDefaultControl>
+                        <input matSliderThumb [value]="boidsSeparationRadius">
+                        </mat-slider>
+                    </p>
+                    <p>&nbsp;</p>
+                    <p class="slider-p predators">
+                        Predators Reproduction Modif :
+                        <mat-slider [(ngModel)]="predatorReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
+                        name="predatorReproductionModificator" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorReproductionModificator">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p predators">
+                        Predators Reproduction Chances % :
+                        <mat-slider [(ngModel)]="predatorReproductionChances" min="0" max="100" step="5" showTickMarks discrete
+                        name="predatorReproductionChances" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorReproductionChances">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p predators">
+                        Predator Evolution Chances % :
+                        <mat-slider [(ngModel)]="predatorEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
+                        name="predatorEvolutionChances" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorEvolutionChances">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p predators">
+                        Predator Max Evolution % :
+                        <mat-slider [(ngModel)]="predatorEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
+                        name="predatorEvolutionCap" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorEvolutionCap">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p predators">
+                        Separation Radius in px :
+                        <mat-slider [(ngModel)]="predatorsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
+                        name="predatorsSeparationRadius" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorsSeparationRadius">
+                        </mat-slider>
+                    </p>
+                    <p class="slider-p predators">
+                        Resistance to starvation :
+                        <mat-slider [(ngModel)]="predatorStarvationModificator" min="-10" max="10" step="1" showTickMarks discrete
+                        name="predatorStarvationModificator" ngDefaultControl>
+                        <input matSliderThumb [value]="predatorStarvationModificator">
+                        </mat-slider>
+                    </p>
+                </div>  
+            </div>
+        </form>
+    </div>
+
+    <div class="status-container">
+        <p class="boid-display">Total Boids: {{ totalBoids }}</p>
+        <p class="predator-display">Total Predators: {{ totalPredators }}</p>
+        <p class="fps-display">FPS: {{ fps }}</p>
+        <p class="fps-display">{{ errorMessage }}</p>
+    </div>
+</div>
+ 
