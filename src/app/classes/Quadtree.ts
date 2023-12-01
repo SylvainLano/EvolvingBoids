@@ -280,7 +280,8 @@ export class Quadtree {
     const x = predator.position.x;
     const y = predator.position.y;
     let factor = 1;
-    let searchRadius = (10 * 2**factor);
+    let baseRadius = Math.min( predator.quadtree.width, predator.quadtree.height ) / 3;
+    let searchRadius = (baseRadius * 2**factor);
   
     let queue: Quadtree[] = this.regionRangeQuery(predator, searchRadius);
     const checked = new Set();
@@ -311,7 +312,7 @@ export class Quadtree {
           break;
         } else {
           factor++;
-          searchRadius = (10 * 2**factor);
+          searchRadius = (baseRadius * 2**factor);
           queue = this.regionRangeQuery(predator, searchRadius);
         }
       }
@@ -384,6 +385,23 @@ export class Quadtree {
 
         if ( current.subdivided ) {
           queue.push( current.nw!, current.ne!, current.sw!, current.se! );
+        }
+    }
+
+    return result;
+  }
+
+  retrieveFinalQuadtrees (): Quadtree[] {
+    let result: Quadtree[] = [];
+    const queue: Quadtree[] = [this];
+
+    while ( queue.length > 0 ) {
+        const current = queue.shift()!;
+
+        if ( current.subdivided ) {
+          queue.push( current.nw!, current.ne!, current.sw!, current.se! );
+        } else if ( current.entities.length !== 0 ) {
+          result.push( current );
         }
     }
 

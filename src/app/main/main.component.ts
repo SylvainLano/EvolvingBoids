@@ -28,8 +28,8 @@ interface Point {
 
 export class MainComponent implements OnInit {
   boids: Boid[] = [];
-  numberOfBoids = 50;                 // number of boids created when the simulation starts
-  boidReproductionRate = 500;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
+  numberOfBoids = 100;                // number of boids created when the simulation starts
+  boidReproductionRate = 300;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
   reproductionThreshold = 1000;       // needed quiet time to nest - can be modified by the input boidReproductionModificator
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
   boidReproductionChances = 10;       // percentage of chances to reproduce - can be modified by the user
@@ -43,8 +43,8 @@ export class MainComponent implements OnInit {
   borderDistance = 50;                // distance at which a boid start to avoid a border
   boidMaxSteeringForce = 0.1;         // maximum force to change direction
   borderAvoidanceForce = 5;           // factor to avoid screen borders
-  fleeRadius = 100;                   // distance at which a boid detects a predator
-  fleeFactor = 1;                     // importance of the flee regarding other directionnal factors
+  fleeRadius = 100;                   // distance at which a boid detects a predator - can be modified by the user
+  fleeFactor = 2;                     // importance of the flee regarding other directionnal factors - can be modified by the user
   fleeForceThreshold = 0.2;           // maximum fleeing force to have a quiet time - can be modified by the input boidReproductionModificator
   fleeReset = false;                  // does the fleeing process restarts the quiet time to 0
   lastBoidBirthPosition =  { x: 0, y: 0 };
@@ -56,10 +56,10 @@ export class MainComponent implements OnInit {
   predatorEvolutionChances = 5;       // chances for the child to evolve - can be modified by the user
   predatorEvolutionStep = 5;          // size of steps of evolution modification in percent
   predatorEvolutionCap = 50;          // maximum evolution modification in percent - can be modified by the user
-  predatorMaxSteeringForce = 0.11;    // maximum force to change direction
+  predatorMaxSteeringForce = 0.12;    // maximum force to change direction
   predatorsSeparationRadius = 50;     // radius to move from other boids - can be modified by the user
-  predatorMaxVelocity = 2.4;          // maximum velocity of the chasing predator - can be modified by evolution
-  starvationThreshold = 2000;         // delay before a predator starves to death - can be modified by the input predatorStarvationModificator
+  predatorMaxVelocity = 2.5;          // maximum velocity of the chasing predator - can be modified by evolution
+  starvationThreshold = 1000;         // delay before a predator starves to death - can be modified by the input predatorStarvationModificator
   captureDistance = 5;                // distance to get to eat a boid
 
   mousePosition = { x: 0, y: 0 };
@@ -69,9 +69,15 @@ export class MainComponent implements OnInit {
   totalPredators: number = 0;
 
   addOnClick: string = 'predator';
-  optionsVisible: boolean = false;
+  boidOptionsVisible: boolean = false;
+  predatorOptionsVisible: boolean = false;
+  displayOptionsVisible: boolean = false;
   errorMessage = "";
   errorFadeOut = 0;
+  drawQuadtree = false;
+  displayQuadtreeCount = false;
+  displayFPSCount = false;
+  displayBoidCount = false;
   boidReproductionModificator = 0;        // increase or decrease the reproduction rate for Boids
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
@@ -115,6 +121,7 @@ export class MainComponent implements OnInit {
   }
 
   quadtree!: Quadtree;
+  finalQuadtreeList: Quadtree[] = [this.quadtree];
   constructor(private el: ElementRef) {}
 
   ngOnInit() {
@@ -126,7 +133,8 @@ export class MainComponent implements OnInit {
     const boidContainer = this.el.nativeElement.querySelector('.boid-container');
     this.containerWidth = boidContainer.offsetWidth;
     this.containerHeight = boidContainer.offsetHeight;
-    this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 10 );
+    this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 24 );
+    this.finalQuadtreeList = [this.quadtree];
 
     // Initialize boids with random positions and velocities
     for (let i = 0; i < this.numberOfBoids; i++) {
@@ -162,17 +170,21 @@ export class MainComponent implements OnInit {
     event.stopPropagation(); // Prevent the event from propagating down
   }
   
-  toggleOptions() {
-    this.optionsVisible = !this.optionsVisible;
-    var toggleOptionsButton = document.getElementById("toggleOptionsButton");
+  toggleOptions(optionsType: string) {
+    (this as any)[`${optionsType.toLowerCase()}OptionsVisible`] = !(this as any)[`${optionsType.toLowerCase()}OptionsVisible`];
+  
+    const toggleOptionsButton = document.getElementById(`toggle${optionsType}OptionsButton`);
   
     // Toggle the visibility of the hidden options
-    if (this.optionsVisible) {
-      toggleOptionsButton!.textContent = "Hide Options";
-    } else {
-      toggleOptionsButton!.textContent = "Show Options";
+    if (toggleOptionsButton) {
+      if ((this as any)[`${optionsType.toLowerCase()}OptionsVisible`]) {
+        toggleOptionsButton.textContent = `Hide ${optionsType} Options`;
+      } else {
+        toggleOptionsButton.textContent = `Show ${optionsType} Options`;
+      }
     }
   }
+  
 
   // Handle mouse movement
   handleMouseMove(event: MouseEvent) {
@@ -203,6 +215,10 @@ export class MainComponent implements OnInit {
 
   updateBoids(timestamp: number) {
 
+    if ( this.drawQuadtree == true ) {
+      this.finalQuadtreeList = this.quadtree.retrieveFinalQuadtrees();
+    }
+
     this.totalBoids = this.boids.length;
     this.totalPredators = this.predators.length;
 
@@ -224,7 +240,10 @@ export class MainComponent implements OnInit {
         );
 
         const nearbyBoids = boid.quadtree.rangeQuery( boid, boidsLargestRadius );
-        const nearbyPredators = boid.quadtree.rangeQuery( boid, this.fleeRadius, true );
+        let nearbyPredators: Boid[] = [];
+        if ( this.fleeFactor != 0 ) {
+          nearbyPredators = boid.quadtree.rangeQuery( boid, this.fleeRadius, true );
+        }
 
         // Alignment: Align the velocity with the average velocity of nearby boids
         let { alignment, cohesion, separation } = this.calculateFlock(boid, nearbyBoids);
