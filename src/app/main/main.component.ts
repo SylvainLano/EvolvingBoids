@@ -28,7 +28,7 @@ interface Point {
 
 export class MainComponent implements OnInit {
   boids: Boid[] = [];
-  numberOfBoids = 100;                // number of boids created when the simulation starts
+  numberOfBoids = 200;                // number of boids created when the simulation starts
   boidReproductionRate = 300;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
   reproductionThreshold = 1000;       // needed quiet time to nest - can be modified by the input boidReproductionModificator
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
@@ -121,6 +121,7 @@ export class MainComponent implements OnInit {
   }
 
   quadtree!: Quadtree;
+  rangeQueryCap = 1;
   finalQuadtreeList: Quadtree[] = [this.quadtree];
   constructor(private el: ElementRef) {}
 
@@ -239,10 +240,10 @@ export class MainComponent implements OnInit {
           this.reproductionRadius
         );
 
-        const nearbyBoids = boid.quadtree.rangeQuery( boid, boidsLargestRadius );
+        const nearbyBoids = boid.quadtree.rangeQuery( boid, boidsLargestRadius, this.rangeQueryCap );
         let nearbyPredators: Boid[] = [];
         if ( this.fleeFactor != 0 ) {
-          nearbyPredators = boid.quadtree.rangeQuery( boid, this.fleeRadius, true );
+          nearbyPredators = boid.quadtree.rangeQuery( boid, this.fleeRadius, this.rangeQueryCap, true );
         }
 
         // Alignment: Align the velocity with the average velocity of nearby boids
@@ -264,9 +265,9 @@ export class MainComponent implements OnInit {
         let fleePredators = this.fleePredators(boid, nearbyPredators);
         
         // Check if the flee force is below a certain threshold
-        const fleeForceMagnitude = Math.sqrt(fleePredators.x ** 2 + fleePredators.y ** 2);
-        
-        if (fleeForceMagnitude < (this.fleeForceThreshold * (1.1 + this.boidReproductionModificator / 10))) {
+        const fleeForceMagnitudeSquared = fleePredators.x ** 2 + fleePredators.y ** 2;
+
+        if (fleeForceMagnitudeSquared < (this.fleeForceThreshold ** 2 * (1.1 + this.boidReproductionModificator / 10))) {
           // Increment the quiet time counter
           boid.predationCounter++;
         } else if ( this.fleeReset ) {
@@ -274,26 +275,32 @@ export class MainComponent implements OnInit {
           boid.predationCounter = 0;
         }
 
+
         let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor);
         let velocityChangeY = (separation.y + alignment.y + cohesion.y + avoidBorders.y + fleePredators.y * this.fleeFactor);
 
         // Limit the maximum steering force
-        const totalForce = Math.sqrt( velocityChangeX ** 2 + velocityChangeY ** 2 );
+        const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
 
-        if (totalForce > this.boidMaxSteeringForce) {
-          const ratio = this.boidMaxSteeringForce / totalForce;
+        // Compare with the squared maximum steering force
+        if (totalForceSquared > this.boidMaxSteeringForce ** 2) {
+          // Calculate the scaling ratio
+          const ratio = this.boidMaxSteeringForce / Math.sqrt(totalForceSquared);
+
+          // Scale the individual force components
           velocityChangeX *= ratio;
           velocityChangeY *= ratio;
         }
+
 
         // Update velocity based on the rules
         boid.velocity.x += velocityChangeX;
         boid.velocity.y += velocityChangeY;
 
         // Limit the velocity to a maximum value to prevent unrealistic speeds
-        const speed = Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2);
-        if (speed > boid.maxVelocity) {
-          const ratio = boid.maxVelocity / speed;
+        const speedSquared = (boid.velocity.x ** 2 + boid.velocity.y ** 2);
+        if (speedSquared > boid.maxVelocity ** 2) {
+          const ratio = boid.maxVelocity / Math.sqrt(speedSquared);
           boid.velocity.x *= ratio;
           boid.velocity.y *= ratio;
         }
@@ -315,7 +322,7 @@ export class MainComponent implements OnInit {
 
       } else {
 
-        const nearbyPredators = boid.quadtree.rangeQuery( boid, this.predatorsSeparationRadius, true );
+        const nearbyPredators = boid.quadtree.rangeQuery( boid, this.predatorsSeparationRadius, this.rangeQueryCap, true );
 
         // Separation: Move away from other predators that are too close
         let separation = this.calculatePredatorSeparation(boid, nearbyPredators, this.predatorsSeparationRadius);
@@ -325,12 +332,10 @@ export class MainComponent implements OnInit {
         let maxSteeringForce = this.predatorMaxSteeringForce;
         
         // Limit the velocity to a maximum value to prevent unrealistic speeds
-        const speedBefore = Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2);
+        const speedBeforeSquared = (boid.velocity.x ** 2 + boid.velocity.y ** 2);
 
         if ( boid.reproductionCooldown == 0 ) {
 
-          // Increase starvation counter if the predator didn't eat
-          boid.predationCounter!+= Math.max(1, Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2));
           if (boid.predationCounter! >= ( this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 ) ) {
             boid.isDead = true;
           } else {
@@ -341,7 +346,7 @@ export class MainComponent implements OnInit {
               let closestBoidPosition = { x: closestBoid.position.x, y: closestBoid.position.y };
 
               // Check if the predator has caught the boid (arbitrary threshold for simplicity)
-              if ( this.calculateDistance(boid.position, closestBoidPosition) < this.captureDistance ) {
+              if ( this.calculateDistanceSquared(boid.position, closestBoidPosition) < this.captureDistance**2 ) {
                   // Remove the captured boid
                   closestBoid.quadtree.remove(closestBoid);
                   this.boids = this.boids.filter(b => b !== closestBoid);
@@ -356,9 +361,8 @@ export class MainComponent implements OnInit {
                 // Update predator's velocity to move towards the closest boid
                 closestBoidPosition.x += closestBoid.velocity.x;
                 closestBoidPosition.y += closestBoid.velocity.y;
-                const direction = this.calculateDirection(boid.position, closestBoidPosition);
-                chase.x += direction.x * boid.maxVelocity;
-                chase.y += direction.y * boid.maxVelocity;
+                chase.x += (closestBoidPosition.x - boid.position.x) * boid.maxVelocity;
+                chase.y += (closestBoidPosition.y-boid.position.y) * boid.maxVelocity;
               }
             }
           }
@@ -366,7 +370,7 @@ export class MainComponent implements OnInit {
         } else {
           boid.reproductionCooldown = Math.max ( 0, Math.min(boid.reproductionCooldown - 1, this.predatorReproductionRate * (11 - this.predatorReproductionModificator)/10  ));          
           boid.alpha = Math.max ( boid.alpha * 0.99, 1 - Math.min(0.7, boid.reproductionCooldown/this.predatorReproductionRate));
-          maxVelocity = Math.max(speedBefore * 0.99, boid.maxVelocity / 3);
+          maxVelocity = Math.max(Math.sqrt(speedBeforeSquared) * 0.99, boid.maxVelocity / 3);
           if (avoidBorders.x === 0 && avoidBorders.y === 0) {
             maxSteeringForce /= 10;
           }
@@ -375,19 +379,22 @@ export class MainComponent implements OnInit {
         
         if ( chase.x == 0 && chase.y == 0 && this.totalBoids != 0 ) {
           // Update predator's velocity to move towards the last Boid Birth Position
-          const direction = this.calculateDirection(boid.position, this.lastBoidBirthPosition);
-          chase.x += (direction.x + avoidBorders.x) * maxVelocity;
-          chase.y += (direction.y + avoidBorders.y) * maxVelocity;
+          chase.x += ((this.lastBoidBirthPosition.x - boid.position.x) + avoidBorders.x) * maxVelocity;
+          chase.y += ((this.lastBoidBirthPosition.y - boid.position.y) + avoidBorders.y) * maxVelocity;
         }
 
         let velocityChangeX = (separation.x + chase.x );
         let velocityChangeY = (separation.y + chase.y );
 
         // Limit the maximum steering force
-        const totalForce = Math.sqrt( velocityChangeX ** 2 + velocityChangeY ** 2 );
+        const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
 
-        if (totalForce > maxSteeringForce) {
-          const ratio = maxSteeringForce / totalForce;
+        // Compare with the squared maximum steering force
+        if (totalForceSquared > maxSteeringForce ** 2) {
+          // Calculate the scaling ratio
+          const ratio = maxSteeringForce / Math.sqrt(totalForceSquared);
+
+          // Scale the individual force components
           velocityChangeX *= ratio;
           velocityChangeY *= ratio;
         }
@@ -397,11 +404,18 @@ export class MainComponent implements OnInit {
         boid.velocity.y += velocityChangeY;
         
         // Limit the velocity to a maximum value to prevent unrealistic speeds
-        const speed = Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2);
-        if (speed > maxVelocity) {
-          const ratio = maxVelocity / speed;
+        const speedSquared = boid.velocity.x ** 2 + boid.velocity.y ** 2;
+        if (speedSquared > maxVelocity ** 2) {
+          const ratio = maxVelocity / Math.sqrt(speedSquared);
           boid.velocity.x *= ratio;
           boid.velocity.y *= ratio;
+          if ( boid.reproductionCooldown == 0 && boid.isPredator ) {
+            // Increase starvation counter if the predator didn't eat
+            boid.predationCounter+= boid.maxVelocity;
+          }
+        } else if ( boid.reproductionCooldown == 0 && boid.isPredator ) {
+          // Increase starvation counter if the predator didn't eat
+          boid.predationCounter+= Math.sqrt(boid.velocity.x**2 + boid.velocity.y**2);
         }
         
       }
@@ -425,25 +439,26 @@ export class MainComponent implements OnInit {
   fleePredators(currentBoid: Boid, predators: Boid[]): Point {
     
       const fleePredatorsForce = { x: 0, y: 0 };
+      const fleeRadiusSquared = this.fleeRadius**2;
 
       for (let predator of predators) {
-          const distance = this.calculateDistance(currentBoid.position, predator.position);
+          const distanceSquared = this.calculateDistanceSquared(currentBoid.position, predator.position);
 
-          if (distance < this.fleeRadius) {
+          if (distanceSquared < fleeRadiusSquared) {
               const diffX = currentBoid.position.x - predator.position.x;
               const diffY = currentBoid.position.y - predator.position.y;
-
+              const distance = Math.sqrt(distanceSquared);
               fleePredatorsForce.x = diffX / distance;
               fleePredatorsForce.y = diffY / distance;
           }
       }
 
-      const distance = this.calculateDistance(currentBoid.position, this.mousePosition);
+      const distanceSquared = this.calculateDistanceSquared(currentBoid.position, this.mousePosition);
 
-      if (distance < this.fleeRadius && distance != 0) {
+      if (distanceSquared < fleeRadiusSquared && distanceSquared != 0) {
           const diffX = currentBoid.position.x - this.mousePosition.x;
           const diffY = currentBoid.position.y - this.mousePosition.y;
-
+          const distance = Math.sqrt(distanceSquared);
           fleePredatorsForce.x = diffX / distance;
           fleePredatorsForce.y = diffY / distance;
       }
@@ -530,10 +545,11 @@ export class MainComponent implements OnInit {
   }
 
   tryToReproduce(boid: Boid) {
+    const reproductionRadiusSquared = this.reproductionRadius**2;
     const reproductionPartners = this.boids.filter(otherBoid => {
-      const distance = this.calculateDistance(boid.position, otherBoid.position);
+      const distanceSquared = this.calculateDistanceSquared(boid.position, otherBoid.position);
       return (
-        distance < this.reproductionRadius &&
+        distanceSquared < reproductionRadiusSquared &&
         this.areVelocitiesSimilar(boid.velocity, otherBoid.velocity) &&
         otherBoid.predationCounter >= ( this.reproductionThreshold * (11 - this.boidReproductionModificator)/10 ) &&
         otherBoid.reproductionCooldown === 0
@@ -562,34 +578,19 @@ export class MainComponent implements OnInit {
     return Math.acos(cosineSimilarity) < angleThreshold;
   }
 
-  findClosestBoid(currentBoid: Boid, boids: Boid[]): Boid | undefined {
-      let closestBoid: Boid | undefined;
-      let closestDistance = Number.MAX_VALUE;
-
-      for (let otherBoid of boids) {
-          const distance = this.calculateDistance(currentBoid.position, otherBoid.position);
-
-          if (distance < closestDistance) {
-              closestDistance = distance;
-              closestBoid = otherBoid;
-          }
-      }
-
-      return closestBoid;
-  }
-
   calculatePredatorSeparation(currentBoid: Boid, boids: Boid[], separationRadius: number) {
     
     const separation = { x: 0, y: 0 };
+    const separationRadiusSquared = separationRadius**2;
 
     for (let otherBoid of boids) {
       if (otherBoid !== currentBoid) {
-        const distance = this.calculateDistance(currentBoid.position, otherBoid.position);
+        const distanceSquared = this.calculateDistanceSquared(currentBoid.position, otherBoid.position);
 
-        if (distance < separationRadius) {
+        if (distanceSquared < separationRadiusSquared) {
           const diffX = currentBoid.position.x - otherBoid.position.x;
           const diffY = currentBoid.position.y - otherBoid.position.y;
-
+          const distance = Math.sqrt(distanceSquared);
           separation.x += diffX / distance;
           separation.y += diffY / distance;
         }
@@ -605,25 +606,28 @@ export class MainComponent implements OnInit {
     let totalBoidsForDirection = 0;
     let direction = { x: 0, y: 0 }
     const separation = { x: 0, y: 0 };
+    const alignmentRadiusSquared = this.alignmentRadius**2;
+    const cohesionRadiusSquared = this.cohesionRadius**2;
+    const boidsSeparationRadiusSquared = this.boidsSeparationRadius**2;
 
     for (let otherBoid of boids) {
       if (otherBoid !== currentBoid) {
-        const distance = this.calculateDistance(currentBoid.position, otherBoid.position);
+        const distanceSquared = this.calculateDistanceSquared(currentBoid.position, otherBoid.position);
 
-        if (distance < this.alignmentRadius) {
+        if (distanceSquared < alignmentRadiusSquared) {
           averageVelocity.x += otherBoid.velocity.x;
           averageVelocity.y += otherBoid.velocity.y;
           totalBoidsForVelocity++;
         }
-        if (distance < this.cohesionRadius) {
+        if (distanceSquared < cohesionRadiusSquared) {
           averagePosition.x += otherBoid.position.x;
           averagePosition.y += otherBoid.position.y;
           totalBoidsForDirection++;
         }
-        if (distance < this.boidsSeparationRadius) {
+        if (distanceSquared < boidsSeparationRadiusSquared) {
           const diffX = currentBoid.position.x - otherBoid.position.x;
           const diffY = currentBoid.position.y - otherBoid.position.y;
-
+          const distance = Math.sqrt(distanceSquared);
           separation.x += diffX / distance;
           separation.y += diffY / distance;
         }
@@ -648,10 +652,10 @@ export class MainComponent implements OnInit {
     };
   }
 
-  calculateDistance(point1: Point, point2: Point) {
+  calculateDistanceSquared(point1: Point, point2: Point) {
     const diffX = point1.x - point2.x;
     const diffY = point1.y - point2.y;
-    return Math.sqrt(diffX * diffX + diffY * diffY);
+    return (diffX **2 + diffY **2);
   }
   
   calculateDirection(from: Point, to: Point) {

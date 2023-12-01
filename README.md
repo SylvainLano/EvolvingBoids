@@ -18,14 +18,9 @@
 
 ## Development
 
-### DONES
-- New options to show/hide the Quadtrees, their boid count, the total boids and the FPS  
-- New options for Boids to modify preadator detection and fleeing force  
-- Few improvements in Quadtree and main component
-
 ### Todos
-- Add more evolutions  
-- Improve optimization  
+- Create a Canvas version to allow people to compare performances
+- Add more evolutions 
 
 ### Futures developments and ideas
 - Add line of sight  

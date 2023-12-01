@@ -1,16 +1,6 @@
 <!-- boid.component.html -->
 <div class="boid" [style.left.px]="position.x" [style.top.px]="position.y"
-  [ngClass]="{'predator': isPredator}"
-  [ngStyle]="{
-    'color': isDead ?
-      'rgba(0, 0, 0, ' + alpha + ')' :
-      isEvolved ?
-        isPredator ? 
-          'rgba(' + (255 * alpha) + ', ' + (255 - 255 * alpha) + ', 200, 1)' :
-          'rgba(0, 200, 255, 1)' :
-        isPredator ? 
-          'rgba(' + (255 * alpha) + ', ' + (255 - 255 * alpha) + ', 0, 1)' :
-          'rgba(0, 0, 255, 1)',
-    'transform': 'rotate(' + calculateRotation() + 'deg) scale(' + (isDead ? 2 - alpha : 1) + ')'}">
+  [ngClass]="{'predator': isPredator}" [ngStyle]="colorStyle"
+  [style.transform]="'rotate(' + calculateRotation() + 'deg) scale(' + (isDead ? 2 - alpha : 1) + ')'">
   ➤
 </div>

@@ -230,7 +230,7 @@ export class Quadtree {
     return false;  // No overlapping border
   }
 
-  rangeQuery(boid:Boid, radius: number, predators: boolean = false): Boid[] {
+  rangeQuery(boid:Boid, radius: number, cap: number, predators: boolean = false): Boid[] {
     const result: Boid[] = [];
     const queue: Quadtree[] = [boid.quadtree];
     const checked = new Set([boid.quadtree]);
@@ -246,6 +246,10 @@ export class Quadtree {
                 : current.entities.filter(entity => !entity.isPredator);
 
             result.push(...filteredEntities);
+
+            if ( result.length >= cap ) {
+              break;
+            }
 
             for ( const neighbor of current.neighbors ) {
               if ( !checked.has(neighbor) ) {
@@ -286,7 +290,7 @@ export class Quadtree {
     let queue: Quadtree[] = this.regionRangeQuery(predator, searchRadius);
     const checked = new Set();
     let closestBoid: Boid | null = null;
-    let closestDistance = 0;
+    let closestDistance = Number.MAX_VALUE;
     
     while (queue.length > 0) {
       const currentRegion = queue.shift()!;
@@ -299,7 +303,7 @@ export class Quadtree {
         if (regularBoids.length > 0) {
           // If there are regular boids in the current region, return the closest one
           const thisClosestBoid = this.findClosestBoidInList({ x, y }, regularBoids);
-          const thisClosestDistance = this.calculateDistance(predator.position, thisClosestBoid.position)
+          const thisClosestDistance = this.calculateSquaredDistance(predator.position, thisClosestBoid.position)
           if ( ( closestBoid === null || thisClosestDistance < closestDistance ) ) {
             closestBoid = thisClosestBoid;
             closestDistance = thisClosestDistance;
@@ -350,7 +354,7 @@ export class Quadtree {
     let closestDistance = Number.MAX_VALUE;
   
     for (let otherBoid of boids) {
-      const distance = this.calculateDistance(point, otherBoid.position);
+      const distance = this.calculateSquaredDistance(point, otherBoid.position);
   
       if (distance < closestDistance) {
         closestDistance = distance;
@@ -361,10 +365,10 @@ export class Quadtree {
     return closestBoid;
   }  
 
-  calculateDistance(point1: Vec2, point2: Vec2) {
+  calculateSquaredDistance(point1: Vec2, point2: Vec2) {
     const diffX = point1.x - point2.x;
     const diffY = point1.y - point2.y;
-    return Math.sqrt(diffX * diffX + diffY * diffY);
+    return (diffX * diffX + diffY * diffY);
   }  
 
   countEntities (onlyPredators: boolean = false, onlyNormal: boolean = false): number {
