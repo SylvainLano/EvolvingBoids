@@ -72,12 +72,15 @@ export class MainComponent implements OnInit {
   boidOptionsVisible: boolean = false;
   predatorOptionsVisible: boolean = false;
   displayOptionsVisible: boolean = false;
+  simulationOptionsVisible: boolean = false;
   errorMessage = "";
   errorFadeOut = 0;
-  drawQuadtree = false;
-  displayQuadtreeCount = false;
+  pauseSimulation = false;
+  drawQuadtree = true;
+  displayQuadtreeCount = true;
   displayFPSCount = false;
-  displayBoidCount = false;
+  displayBoidCount = true;
+  darkMode = false;
   boidReproductionModificator = 0;        // increase or decrease the reproduction rate for Boids
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
@@ -125,7 +128,15 @@ export class MainComponent implements OnInit {
   finalQuadtreeList: Quadtree[] = [this.quadtree];
   constructor(private el: ElementRef) {}
 
-  ngOnInit() {
+  ngOnInit(): void {
+    this.initializeSimulation();
+  }
+
+  restartSimulation(): void {
+    this.initializeSimulation();
+  }
+
+  initializeSimulation() {
 
     document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
     document.addEventListener('click', (event) => this.handleMouseClick(event));
@@ -136,6 +147,8 @@ export class MainComponent implements OnInit {
     this.containerHeight = boidContainer.offsetHeight;
     this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 24 );
     this.finalQuadtreeList = [this.quadtree];
+    this.boids = [];
+    this.predators = [];
 
     // Initialize boids with random positions and velocities
     for (let i = 0; i < this.numberOfBoids; i++) {
@@ -169,6 +182,16 @@ export class MainComponent implements OnInit {
   
   handleFormClick(event: MouseEvent) {
     event.stopPropagation(); // Prevent the event from propagating down
+  }
+  
+  togglePause() {
+    this.pauseSimulation = !this.pauseSimulation;
+    const pauseText = document.getElementById(`pauseSimulation`);
+    if (this.pauseSimulation) {
+      pauseText!.textContent = "Resume Simulation";
+    } else {
+      pauseText!.textContent = "Pause Simulation";
+    }
   }
   
   toggleOptions(optionsType: string) {
@@ -215,6 +238,8 @@ export class MainComponent implements OnInit {
   }
 
   updateBoids(timestamp: number) {
+
+    if ( this.pauseSimulation === false ) {
 
     if ( this.drawQuadtree == true ) {
       this.finalQuadtreeList = this.quadtree.retrieveFinalQuadtrees();
@@ -427,6 +452,7 @@ export class MainComponent implements OnInit {
       boid.quadtree.move( boid, newPosition );
       
     }
+  }
 
     // Update FPS
     this.updateFPS(timestamp);

@@ -6,6 +6,9 @@
   top: 0
   left: 0
 
+.main-container-dark
+  background-color: #0f172a
+
 .boid-container
   position: absolute
   width: 100%
@@ -23,11 +26,20 @@
   z-index: 0
   user-select: none
 
+.quadtree-container-dark
+  background-color: #0f172a
+
+.quadtree-dark
+  color: #223044
+  border: 1px solid #223044
+
+.quadtree-light
+  color: #EEEEEE
+  border: 1px solid lightgrey
+
 .quadtree
   position: absolute
-  border: 1px solid lightgrey
   margin: 0px
-  color: #EEEEEE
   font-family: Monaco, monospace
   text-align: center
   
@@ -58,24 +70,39 @@
   &:hover
     opacity: 1
 
-
 .form-container a
-  color: darkgreen
   font-weight: bold
 
-.hidden-options
+.hidden-options-light
   margin-bottom: 20px
 
-.boid-display
+.hidden-options-dark
+  margin-bottom: 20px
+  color: white
+
+.boid-display-dark
+  color: lightblue
+  font-size: 16px
+  font-family: Monaco, monospace
+
+.boid-display-light
   color: blue
   font-size: 16px
   font-family: Monaco, monospace
 
-.predator-display
+.predator-display-dark
+  color: pink
+  font-size: 16px
+
+.predator-display-light
   color: red
   font-size: 16px
 
-.fps-display
+.fps-display-dark
+  color: lightgreen
+  font-size: 16px
+
+.fps-display-light
   color: green
   font-size: 16px
 
@@ -88,13 +115,36 @@
   height: 15px
   z-index: 10
 
-.boids-options
+.boids-options-dark
+  color: lightblue
+
+.boids-options-light
   color: darkblue
 
-.predators-options
+.predators-options-dark
+  color: pink
+
+.predators-options-light
   color: darkred
 
-.display-options
+.display-options-light
   color: darkgreen
+
+.display-options-dark
+  color: lightgreen
+
+.display-options
   margin: 0
   padding: 0
+
+.simulation-blue-dark
+  color: lightblue
+
+.simulation-red-dark
+  color: pink
+
+.simulation-blue-light
+  color: darkblue
+
+.simulation-red-light
+  color: darkred

@@ -1,4 +1,4 @@
-<div class="main-container">
+<div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''">
     <div class="boid-container">
         <app-boid *ngFor="let boid of boids.concat(predators)"
             [position]="boid.position"
@@ -7,10 +7,12 @@
             [isDead]="boid.isDead"
             [isEvolved]="boid.isEvolved"
             [alpha]="boid.alpha"
+            [darkMode]="darkMode"
         ></app-boid>
     </div>
-    <div class="quadtree-container" *ngIf="drawQuadtree">
+    <div class="quadtree-container" [ngClass]="darkMode ? 'quadtree-container-dark' : ''" *ngIf="drawQuadtree">
         <div *ngFor="let quadtree of finalQuadtreeList" class="quadtree"
+            [ngClass]="darkMode ? 'quadtree-dark' : 'quadtree-light'"
             [style.left.px]="quadtree.x"
             [style.top.px]="quadtree.y"
             [style.width.px]="quadtree.width"
@@ -25,34 +27,50 @@
 <div class="display-container">
 
     <div class="status-container">
-        <p class="boid-display" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }}</p>
-        <p class="predator-display" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }}</p>
-        <p class="fps-display" *ngIf="displayFPSCount">FPS: {{ fps }}</p>
-        <p class="fps-display">{{ errorMessage }}</p>
+        <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }}</p>
+        <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }}</p>
+        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'" *ngIf="displayFPSCount">FPS: {{ fps }}</p>
+        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
     </div>
 
     <div class="form-container" (click)="handleFormClick($event)">
         <form>
-            <div class="hidden-options">
-                Click to add a
-                <label>
-                    <input type="radio" [(ngModel)]="addOnClick" value="predator" name="addOnClick"> Predator
-                </label>
-                <label>
-                    <input type="radio" [(ngModel)]="addOnClick" value="boid" name="addOnClick"> Boid
-                </label>
-                <br />
-                <p class="display-options" *ngIf="!boidOptionsVisible && !predatorOptionsVisible">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'">
+                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !predatorOptionsVisible && !displayOptionsVisible">
+                    -> <a (click)="toggleOptions('Simulation')" id="toggleSimulationOptionsButton">Show Simulation Options</a>
+                </p>
+                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !predatorOptionsVisible && !simulationOptionsVisible">
                     -> <a (click)="toggleOptions('Display')" id="toggleDisplayOptionsButton">Show Display Options</a>
                 </p>
-                <p class="display-options" *ngIf="!displayOptionsVisible && !predatorOptionsVisible">
+                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!displayOptionsVisible && !predatorOptionsVisible && !simulationOptionsVisible">
                     -> <a (click)="toggleOptions('Boid')" id="toggleBoidOptionsButton">Show Boids Options</a>
                 </p>
-                <p class="display-options" *ngIf="!boidOptionsVisible && !displayOptionsVisible">
+                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !displayOptionsVisible && !simulationOptionsVisible">
                     -> <a (click)="toggleOptions('Predator')" id="togglePredatorOptionsButton">Show Predator Options</a>
                 </p>
             </div>
-            <div class="hidden-options" *ngIf="displayOptionsVisible" id="hiddenDisplayOptions">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="simulationOptionsVisible" id="hiddenSimulationOptions">
+                <p>
+                    Click to add a
+                    <label>
+                        <input type="radio" [(ngModel)]="addOnClick" value="predator" name="addOnClick"> Predator
+                    </label>
+                    <label>
+                        <input type="radio" [(ngModel)]="addOnClick" value="boid" name="addOnClick"> Boid
+                    </label>
+                </p>
+                <p [ngClass]="darkMode ? pauseSimulation ? 'simulation-blue-dark' : 'simulation-red-dark' : pauseSimulation ? 'simulation-blue-light' : 'simulation-red-light'">
+                    -> <a (click)="togglePause()" id="pauseSimulation">Pause Simulation</a>
+                </p>
+                <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
+                    -> <a (click)="initializeSimulation()" id="restartSimulation">Restart Simulation</a>
+                </p>
+            </div>
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="displayOptionsVisible" id="hiddenDisplayOptions">
+                <p class="display-options">
+                    Dark Mode :
+                    <input type="checkbox" [(ngModel)]="darkMode" name="darkMode">
+                </p>
                 <p class="display-options">
                     Draw Quadtrees :
                     <input type="checkbox" [(ngModel)]="drawQuadtree" name="drawQuadtree">
@@ -70,68 +88,68 @@
                     <input type="checkbox" [(ngModel)]="displayFPSCount" name="displayFPSCount">
                 </p>
             </div>
-            <div class="hidden-options" *ngIf="boidOptionsVisible" id="hiddenBoidOptions">
-                <p class="slider-p boids-options">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="boidOptionsVisible" id="hiddenBoidOptions">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Alignment Radius in px :
                     <mat-slider [(ngModel)]="alignmentRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="alignmentRadius" ngDefaultControl>
                     <input matSliderThumb [value]="alignmentRadius">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Cohesion Radius in px :
                     <mat-slider [(ngModel)]="cohesionRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="cohesionRadius" ngDefaultControl>
                     <input matSliderThumb [value]="cohesionRadius">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Separation Radius in px :
                     <mat-slider [(ngModel)]="boidsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="boidsSeparationRadius" ngDefaultControl>
                     <input matSliderThumb [value]="boidsSeparationRadius">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Reproduction Modif :
                     <mat-slider [(ngModel)]="boidReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="boidReproductionModificator" ngDefaultControl>
                     <input matSliderThumb [value]="boidReproductionModificator">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Reproduction Chances % :
                     <mat-slider [(ngModel)]="boidReproductionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="boidReproductionChances" ngDefaultControl>
                     <input matSliderThumb [value]="boidReproductionChances">
                     </mat-slider>
                 </p>
-                <p class="option boids-options">
+                <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Fleeing a Predator resets nesting time :
                     <input type="checkbox" [(ngModel)]="fleeReset" name="fleeReset">
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Evolution Chances % :
                     <mat-slider [(ngModel)]="boidEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="boidEvolutionChances" ngDefaultControl>
                     <input matSliderThumb [value]="boidEvolutionChances">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Max Evolution % :
                     <mat-slider [(ngModel)]="boidEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
                     name="boidEvolutionCap" ngDefaultControl>
                     <input matSliderThumb [value]="boidEvolutionCap">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Predator Detection Radius :
                     <mat-slider [(ngModel)]="fleeRadius" min="20" max="300" step="20" showTickMarks discrete
                     name="fleeRadius" ngDefaultControl>
                     <input matSliderThumb [value]="fleeRadius">
                     </mat-slider>
                 </p>
-                <p class="slider-p boids-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Predator Fleeing Force :
                     <mat-slider [(ngModel)]="fleeFactor" min="-5" max="10" step="1" showTickMarks discrete
                     name="fleeFactor" ngDefaultControl>
@@ -139,43 +157,43 @@
                     </mat-slider>
                 </p>
             </div>
-            <div class="hidden-options" *ngIf="predatorOptionsVisible" id="hiddenPredatorOptions">
-                <p class="slider-p predators-options">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="predatorOptionsVisible" id="hiddenPredatorOptions">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predators Reproduction Modif :
                     <mat-slider [(ngModel)]="predatorReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="predatorReproductionModificator" ngDefaultControl>
                     <input matSliderThumb [value]="predatorReproductionModificator">
                     </mat-slider>
                 </p>
-                <p class="slider-p predators-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predators Reproduction Chances % :
                     <mat-slider [(ngModel)]="predatorReproductionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="predatorReproductionChances" ngDefaultControl>
                     <input matSliderThumb [value]="predatorReproductionChances">
                     </mat-slider>
                 </p>
-                <p class="slider-p predators-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predator Evolution Chances % :
                     <mat-slider [(ngModel)]="predatorEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="predatorEvolutionChances" ngDefaultControl>
                     <input matSliderThumb [value]="predatorEvolutionChances">
                     </mat-slider>
                 </p>
-                <p class="slider-p predators-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predator Max Evolution % :
                     <mat-slider [(ngModel)]="predatorEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
                     name="predatorEvolutionCap" ngDefaultControl>
                     <input matSliderThumb [value]="predatorEvolutionCap">
                     </mat-slider>
                 </p>
-                <p class="slider-p predators-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Separation Radius in px :
                     <mat-slider [(ngModel)]="predatorsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="predatorsSeparationRadius" ngDefaultControl>
                     <input matSliderThumb [value]="predatorsSeparationRadius">
                     </mat-slider>
                 </p>
-                <p class="slider-p predators-options">
+                <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Resistance to starvation :
                     <mat-slider [(ngModel)]="predatorStarvationModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="predatorStarvationModificator" ngDefaultControl>

@@ -13,6 +13,7 @@ export class BoidComponent implements OnChanges {
   @Input() isDead!: boolean;
   @Input() isEvolved!: boolean;
   @Input() alpha!: number;
+  @Input() darkMode!: boolean;
 
   colorStyle: { [key: string]: string } = {};
 
@@ -25,21 +26,32 @@ export class BoidComponent implements OnChanges {
   private shouldRecalculateColor(changes: SimpleChanges): boolean {
     return (
       changes['alpha'] && changes['alpha'].currentValue !== changes['alpha'].previousValue ||
-      changes['isDead'] && changes['isDead'].currentValue !== changes['isDead'].previousValue
+      changes['isDead'] && changes['isDead'].currentValue !== changes['isDead'].previousValue ||
+      changes['darkMode'] && changes['darkMode'].currentValue !== changes['darkMode'].previousValue
     );
   }
 
   private calculateColor(): void {
     this.colorStyle = {
-      'color': this.isDead
-        ? `rgba(0, 0, 0, ${this.alpha})`
-        : this.isEvolved
-          ? this.isPredator
-            ? `rgba(${255 * this.alpha}, ${255 - 255 * this.alpha}, 200, 1)`
-            : 'rgba(0, 200, 255, 1)'
-          : this.isPredator
-            ? `rgba(${255 * this.alpha}, ${255 - 255 * this.alpha}, 0, 1)`
-            : 'rgba(0, 0, 255, 1)'
+      'color': this.darkMode
+        ? this.isDead
+          ? `rgba(255, 255, 255, ${this.alpha})`
+          : this.isEvolved
+            ? this.isPredator
+              ? `rgba(${255 * this.alpha}, ${255 - 100 * this.alpha}, 200, 1)`
+              : 'rgba(150, 200, 255, 1)'
+            : this.isPredator
+              ? `rgba(${255 * this.alpha}, ${255 - 100 * this.alpha}, 150, 1)`
+              : 'rgba(150, 150, 255, 1)'    
+        : this.isDead      
+          ? `rgba(0, 0, 0, ${this.alpha})`
+          : this.isEvolved
+            ? this.isPredator
+              ? `rgba(${255 * this.alpha}, ${255 - 255 * this.alpha}, 200, 1)`
+              : 'rgba(0, 200, 255, 1)'
+            : this.isPredator
+              ? `rgba(${255 * this.alpha}, ${255 - 255 * this.alpha}, 0, 1)`
+              : 'rgba(0, 0, 255, 1)'
     };
   }
 

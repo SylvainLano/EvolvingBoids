@@ -16,9 +16,17 @@
 - All Boids have a Maximum Velocity and a Reproduction Rate that can be altered by evolution  
 - All Boids have a Reproduction Chance, an Evolution Chance and an Evolution Cap that can be modified in the options  
 
+### Evolutions
+- When Regular Boids evolve, they become a lighter blue tone  
+- When Predators evolve, they become pink
+- Evolution can alter Maximum Velocity or Reproduction Rate, for better or worse
+
 ## Development
 
 ### Todos
+- Add different skins (or letters) for boid
+- Add cooperativeness to predator to chase different preys
+- Add a way to remove boids
 - Create a Canvas version to allow people to compare performances
 - Add more evolutions 
 
