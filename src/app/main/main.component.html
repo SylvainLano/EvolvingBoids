@@ -22,6 +22,9 @@
             <div class="boid-count" *ngIf="displayQuadtreeCount">{{ quadtree.entities.length }}</div>
         </div>
     </div>
+    <div class="messages-container">
+        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
+    </div>
 </div>
 
 <div class="display-container">
@@ -30,7 +33,6 @@
         <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }}</p>
         <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }}</p>
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'" *ngIf="displayFPSCount">FPS: {{ fps }}</p>
-        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
     </div>
 
     <div class="form-container" (click)="handleFormClick($event)">
@@ -50,7 +52,7 @@
                 </p>
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="simulationOptionsVisible" id="hiddenSimulationOptions">
-                <p>
+                <div style="display:inline;">
                     Click to add a
                     <label>
                         <input type="radio" [(ngModel)]="addOnClick" value="predator" name="addOnClick"> Predator
@@ -58,13 +60,58 @@
                     <label>
                         <input type="radio" [(ngModel)]="addOnClick" value="boid" name="addOnClick"> Boid
                     </label>
-                </p>
+                </div>
                 <p [ngClass]="darkMode ? pauseSimulation ? 'simulation-blue-dark' : 'simulation-red-dark' : pauseSimulation ? 'simulation-blue-light' : 'simulation-red-light'">
                     -> <a (click)="togglePause()" id="pauseSimulation">Pause Simulation</a>
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
                     -> <a (click)="initializeSimulation()" id="restartSimulation">Restart Simulation</a>
                 </p>
+                <div style="display:inline;">
+                    Simulation Mode :
+                    <ul style="list-style-type:none;">
+                        <li>
+                            <label title="Pause the simulation when one side is depleted.">
+                                <input type="radio" [(ngModel)]="simulationMode" value="DeathMatch" name="simulationMode"> DeathMatch
+                            </label>
+                        </li>
+                        <li>
+                            <label title="Restart the simulation when one side is depleted.">
+                                <input type="radio" [(ngModel)]="simulationMode" value="Retry" name="simulationMode"> Retry
+                            </label>
+                        </li>
+                        <li>
+                            <label title="Continue the simulation without noticing depletion.">
+                                <input type="radio" [(ngModel)]="simulationMode" value="Continued" name="simulationMode"> Continued
+                            </label>
+                        </li>
+                        <li>
+                            <label title="When one side is depleted, add some fresh boids to this side.">
+                                <input type="radio" [(ngModel)]="simulationMode" value="Infinite" name="simulationMode"> Infinite
+                            </label>
+                        </li>
+                    </ul>
+                </div>
+                <div style="display:inline;">
+                    Deal with low FPS :
+                    <ul style="list-style-type:none;">
+                        <li>
+                            <label title="Remove 5 % of the boids in the side in excess.">
+                                <input type="radio" [(ngModel)]="lowFPSAction" value="PopulationControl" name="lowFPSAction"> Population Control
+                            </label>
+                        </li>
+                        <li>
+                            <label title="Remove 50 % of the boids in each side.">
+                                <input type="radio" [(ngModel)]="lowFPSAction" value="BudgetCuts" name="lowFPSAction"> Budget Cuts
+                            </label>
+                        </li>
+                        <li>
+                            <label title="Continue the simulation without noticing depletion.">
+                                <input type="radio" [(ngModel)]="lowFPSAction" value="Nothing" name="lowFPSAction"> Do Nothing
+                            </label>
+                        </li>
+                    </ul>
+                </div>
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="displayOptionsVisible" id="hiddenDisplayOptions">
                 <p class="display-options">
@@ -158,6 +205,15 @@
                 </p>
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="predatorOptionsVisible" id="hiddenPredatorOptions">
+                <p class="option" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'"
+                    title="Predator will try to choose a prey that is not already chased.">
+                    Predator cooperativeness :
+                    <input type="checkbox" [(ngModel)]="predatorsCooperativeness" name="predatorsCooperativeness">
+                </p>
+                <p class="option" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
+                    Predator ability to change prey :
+                    <input type="checkbox" [(ngModel)]="predatorVersatility" name="predatorVersatility">
+                </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predators Reproduction Modif :
                     <mat-slider [(ngModel)]="predatorReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete

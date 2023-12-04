@@ -15,6 +15,7 @@ interface Boid {
   reproductionCooldown: number;
   predationCounter: number;
   quadtree: Quadtree;
+  preyLink : Boid | null;
 }
 
 export class Quadtree {
@@ -280,17 +281,19 @@ export class Quadtree {
     return cornerDistanceSq <= Math.pow(radius, 2);
   }
 
-  findClosestRegularBoid(predator: Boid): Boid | null {
+  findClosestRegularBoid(predator: Boid, unmarked: boolean): Boid | null {
     const x = predator.position.x;
     const y = predator.position.y;
     let factor = 1;
-    let baseRadius = Math.min( predator.quadtree.width, predator.quadtree.height ) / 3;
+    let baseRadius = Math.min( predator.quadtree.width, predator.quadtree.height ) / 2;
     let searchRadius = (baseRadius * 2**factor);
   
     let queue: Quadtree[] = this.regionRangeQuery(predator, searchRadius);
     const checked = new Set();
     let closestBoid: Boid | null = null;
     let closestDistance = Number.MAX_VALUE;
+    let closestUnmarkedBoid: Boid | null = null;
+    let closestUnmarkedDistance = Number.MAX_VALUE;
     
     while (queue.length > 0) {
       const currentRegion = queue.shift()!;
@@ -302,17 +305,22 @@ export class Quadtree {
       
         if (regularBoids.length > 0) {
           // If there are regular boids in the current region, return the closest one
-          const thisClosestBoid = this.findClosestBoidInList({ x, y }, regularBoids);
-          const thisClosestDistance = this.calculateSquaredDistance(predator.position, thisClosestBoid.position)
-          if ( ( closestBoid === null || thisClosestDistance < closestDistance ) ) {
+          const thisClosestBoid = this.findClosestBoidInList({ x, y }, regularBoids, unmarked, predator);
+          const thisClosestDistance = this.calculateSquaredDistance(predator.position, thisClosestBoid.position);
+          
+          if ( ( closestUnmarkedBoid === null || thisClosestDistance < closestUnmarkedDistance )
+            && ( unmarked === false || thisClosestBoid.preyLink === null || thisClosestBoid.preyLink === predator ) ) {
+            closestUnmarkedBoid = thisClosestBoid;
+            closestUnmarkedDistance = thisClosestDistance;
+          } else if ( ( closestBoid === null || thisClosestDistance < closestDistance ) ) {
             closestBoid = thisClosestBoid;
             closestDistance = thisClosestDistance;
           }
         }
       }
       
-      if (queue.length === 0 && factor <= 8 ) {
-        if ( closestBoid != null && closestDistance <= searchRadius ) {
+      if (queue.length === 0 && factor <= (3+predator.quadtree.depth) ) {
+        if ( closestUnmarkedBoid !== null && closestUnmarkedDistance <= searchRadius ) {
           break;
         } else {
           factor++;
@@ -321,8 +329,12 @@ export class Quadtree {
         }
       }
     }
+
+    if ( closestUnmarkedBoid === null && closestBoid !== null ) {
+      closestUnmarkedBoid = closestBoid;
+    }
     
-    return closestBoid;
+    return closestUnmarkedBoid;
   }
 
   regionRangeQuery(boid:Boid, radius: number): Quadtree[] {
@@ -349,20 +361,30 @@ export class Quadtree {
     return result;
   }
   
-  findClosestBoidInList(point: Vec2, boids: Boid[]): Boid {
+  findClosestBoidInList(point: Vec2, boids: Boid[], unmarked: boolean, chasing: Boid | null): Boid {
     let closestBoid: Boid = boids[0];
     let closestDistance = Number.MAX_VALUE;
+    let closestUnmarkedBoid: Boid = boids[0];
+    let closestUnmarkedDistance = Number.MAX_VALUE;
   
     for (let otherBoid of boids) {
-      const distance = this.calculateSquaredDistance(point, otherBoid.position);
+      const distanceSquared = this.calculateSquaredDistance(point, otherBoid.position);
   
-      if (distance < closestDistance) {
-        closestDistance = distance;
+      if ( ( closestUnmarkedBoid === null || distanceSquared < closestUnmarkedDistance )
+        && ( unmarked === false || otherBoid.preyLink === null || otherBoid.preyLink === chasing ) ) {
+        closestUnmarkedBoid = otherBoid;
+        closestUnmarkedDistance = distanceSquared;
+      } else if ( ( closestBoid === null || distanceSquared < closestDistance ) ) {
         closestBoid = otherBoid;
+        closestDistance = distanceSquared;
       }
     }
+
+    if ( closestUnmarkedBoid === null && closestBoid !== null ) {
+      closestUnmarkedBoid = closestBoid;
+    }
   
-    return closestBoid;
+    return closestUnmarkedBoid;
   }  
 
   calculateSquaredDistance(point1: Vec2, point2: Vec2) {

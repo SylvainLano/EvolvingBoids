@@ -25,12 +25,12 @@
 
 ### Todos
 - Add different skins (or letters) for boid
-- Add cooperativeness to predator to chase different preys
-- Add a way to remove boids
-- Create a Canvas version to allow people to compare performances
+- Create a Canvas version to allow users to compare performances
 - Add more evolutions 
 
 ### Futures developments and ideas
+- Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator
+- Add a way to manually remove boids
 - Add line of sight  
 - Add drawing obstacles with the mouse  
 - Add movement anticipation for predators

@@ -13,6 +13,7 @@ interface Boid {
   reproductionCooldown: number;
   predationCounter: number; // predationCounter is time without predation for boids, and time without predating for predators
   quadtree: Quadtree;
+  preyLink : Boid | null;   // for Regular Boids, the Predator that chase them, for Predators, the prey !
 }
 
 interface Point {
@@ -28,7 +29,7 @@ interface Point {
 
 export class MainComponent implements OnInit {
   boids: Boid[] = [];
-  numberOfBoids = 200;                // number of boids created when the simulation starts
+  numberOfBoids = 20;                // number of boids created when the simulation starts
   boidReproductionRate = 300;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
   reproductionThreshold = 1000;       // needed quiet time to nest - can be modified by the input boidReproductionModificator
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
@@ -50,7 +51,7 @@ export class MainComponent implements OnInit {
   lastBoidBirthPosition =  { x: 0, y: 0 };
   
   predators: Boid[] = [];
-  numberOfPredators = 2;              // number of predators created when the simulation starts
+  numberOfPredators = 10;             // number of predators created when the simulation starts
   predatorReproductionRate = 300;     // delay before a predator can reproduce again - can be modified by evolution and by the input predatorReproductionModificator
   predatorReproductionChances = 10;   // percentage of chances to reproduce - can be modified by the user
   predatorEvolutionChances = 5;       // chances for the child to evolve - can be modified by the user
@@ -61,6 +62,8 @@ export class MainComponent implements OnInit {
   predatorMaxVelocity = 2.5;          // maximum velocity of the chasing predator - can be modified by evolution
   starvationThreshold = 1000;         // delay before a predator starves to death - can be modified by the input predatorStarvationModificator
   captureDistance = 5;                // distance to get to eat a boid
+  predatorsCooperativeness = true;    // Do Predator cooperative to chase different preys
+  predatorVersatility = true;         // Can predators change prey after choosing one
 
   mousePosition = { x: 0, y: 0 };
   containerWidth = 0;
@@ -81,6 +84,8 @@ export class MainComponent implements OnInit {
   displayFPSCount = false;
   displayBoidCount = true;
   darkMode = false;
+  simulationMode = "Infinite";
+  lowFPSAction = "PopulationControl";
   boidReproductionModificator = 0;        // increase or decrease the reproduction rate for Boids
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
@@ -130,6 +135,9 @@ export class MainComponent implements OnInit {
 
   ngOnInit(): void {
     this.initializeSimulation();
+    
+    // Start the animation loop
+    this.updateBoids(performance.now());
   }
 
   restartSimulation(): void {
@@ -175,9 +183,6 @@ export class MainComponent implements OnInit {
         this.quadtree
       );
     }
-    
-    // Start the animation loop
-    this.updateBoids(performance.now());
   }
   
   handleFormClick(event: MouseEvent) {
@@ -248,6 +253,8 @@ export class MainComponent implements OnInit {
     this.totalBoids = this.boids.length;
     this.totalPredators = this.predators.length;
 
+    this.dealWithDepletion();
+
     const allBoids = [...this.boids, ...this.predators];
 
     // Boids behavior rules
@@ -256,7 +263,27 @@ export class MainComponent implements OnInit {
       // Avoid borders: Redirect away from the borders
       let avoidBorders = this.avoidBorders(boid);
 
-      if (!boid.isPredator) {
+      if ( boid.isDead ) {
+
+        // Gradually decrease velocity (you can adjust the rate)
+        boid.velocity.x *= 0.98;
+        boid.velocity.y *= 0.98;
+
+        if ( boid.preyLink !== null ) {
+          // Remove the prey mark if any
+          boid.preyLink.preyLink = null;
+        }
+      
+        // Gradually decrease alpha (transparency) (adjust the rate)
+        boid.alpha = Math.max(0, boid.alpha - 0.01);
+
+        if ( boid.alpha <= 0.01 ) {
+          // Remove the starving predator
+          boid.quadtree.remove(boid);
+          this.predators = this.predators.filter(predator => predator !== boid);
+        }
+
+      } else if (!boid.isPredator) {
 
         const boidsLargestRadius = Math.max(
           this.alignmentRadius,
@@ -330,21 +357,6 @@ export class MainComponent implements OnInit {
           boid.velocity.y *= ratio;
         }
 
-      } else if ( boid.isDead ) {
-
-        // Gradually decrease velocity (you can adjust the rate)
-        boid.velocity.x *= 0.98;
-        boid.velocity.y *= 0.98;
-      
-        // Gradually decrease alpha (transparency) (adjust the rate)
-        boid.alpha = Math.max(0, boid.alpha - 0.01);
-
-        if ( boid.alpha <= 0.01 ) {
-          // Remove the starving predator
-          boid.quadtree.remove(boid);
-          this.predators = this.predators.filter(predator => predator !== boid);
-        }
-
       } else {
 
         const nearbyPredators = boid.quadtree.rangeQuery( boid, this.predatorsSeparationRadius, this.rangeQueryCap, true );
@@ -365,7 +377,10 @@ export class MainComponent implements OnInit {
             boid.isDead = true;
           } else {
 
-            const closestBoid = boid.quadtree.findClosestRegularBoid(boid);
+            let closestBoid = boid.preyLink;
+            if ( this.predatorVersatility || boid.preyLink === null ) {
+              closestBoid = boid.quadtree.findClosestRegularBoid(boid, this.predatorsCooperativeness);
+            }
 
             if ( closestBoid !== null ) {
               let closestBoidPosition = { x: closestBoid.position.x, y: closestBoid.position.y };
@@ -382,7 +397,17 @@ export class MainComponent implements OnInit {
 
                   boid.reproductionCooldown = this.predatorReproductionRate;
                   boid.predationCounter = 0;
+                  boid.preyLink = null;
               } else {
+                if ( closestBoid.preyLink === null ) {
+                  // Remove the prey mark from the previous prey if it is different
+                  if ( boid.preyLink != null && boid.preyLink != closestBoid ) {
+                    boid.preyLink.preyLink = null;
+                  }
+                  // Mark the prey
+                  closestBoid.preyLink = boid;
+                  boid.preyLink = closestBoid;
+                }
                 // Update predator's velocity to move towards the closest boid
                 closestBoidPosition.x += closestBoid.velocity.x;
                 closestBoidPosition.y += closestBoid.velocity.y;
@@ -462,6 +487,82 @@ export class MainComponent implements OnInit {
 
   }
 
+  dealWithDepletion() {
+    if ( this.totalBoids === 0 || this.totalPredators === 0 ) {
+      if ( this.simulationMode === "DeathMatch" ) {
+        this.pauseSimulation = true;
+      } else if ( this.simulationMode === "Retry" ) {
+        this.restartSimulation();
+      } else if ( this.simulationMode === "Infinite" ) {
+        if ( this.totalBoids === 0 ) {
+          const numberToAdd = Math.max(4,Math.min(100,this.totalPredators));
+          // Add boids with random positions and velocities
+          for (let i = 0; i < numberToAdd; i++) {
+            // Determine whether the new boid should be placed on a vertical or horizontal boundary
+            const onVerticalBoundary = Math.random() < 0.5;
+
+            // Determine the position on the boundary
+            let position;
+            if (onVerticalBoundary) {
+              // Place on the left or right boundary
+              position = {
+                x: Math.random() < 0.5 ? -5 : this.containerWidth + 5,
+                y: Math.random() * this.containerHeight,
+              };
+            } else {
+              // Place on the top or bottom boundary
+              position = {
+                x: Math.random() * this.containerWidth,
+                y: Math.random() < 0.5 ? -5 : this.containerHeight + 5,
+              };
+            }
+            this.insertNewBoid (
+              position,
+              { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
+              this.boidMaxVelocity,
+              false,
+              this.boidReproductionRate,
+              Math.random() * this.boidReproductionRate,
+              this.quadtree
+            );
+          }
+        } else {
+          const numberToAdd = Math.max(2,Math.min(20,this.totalBoids/10));
+          // Add boids with random positions and velocities
+          for (let i = 0; i < numberToAdd; i++) {
+            // Determine whether the new boid should be placed on a vertical or horizontal boundary
+            const onVerticalBoundary = Math.random() < 0.5;
+
+            // Determine the position on the boundary
+            let position;
+            if (onVerticalBoundary) {
+              // Place on the left or right boundary
+              position = {
+                x: Math.random() < 0.5 ? -5 : this.containerWidth + 5,
+                y: Math.random() * this.containerHeight,
+              };
+            } else {
+              // Place on the top or bottom boundary
+              position = {
+                x: Math.random() * this.containerWidth,
+                y: Math.random() < 0.5 ? -5 : this.containerHeight + 5,
+              };
+            }
+            this.insertNewBoid (
+              position,
+              { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
+              this.predatorMaxVelocity,
+              true,
+              this.predatorReproductionRate,
+              Math.random() * this.predatorReproductionRate,
+              this.quadtree
+            );
+          }
+        }
+      }
+    }
+  }
+
   fleePredators(currentBoid: Boid, predators: Boid[]): Point {
     
       const fleePredatorsForce = { x: 0, y: 0 };
@@ -537,7 +638,7 @@ export class MainComponent implements OnInit {
 
   insertNewBoid ( position: Point, velocity: Point, maxVelocity: number, isPredator: boolean, reproductionRate: number,
     reproductionCooldown: number, quadtree: Quadtree, isEvolved: boolean = false ) {
-    if ( this.errorFadeOut == 0 ) {
+    if ( this.errorFadeOut == 0 || this.pauseSimulation ) {
       if ( this.fps >= this.minFPS  ) {
           
         const boid: Boid = {
@@ -551,7 +652,8 @@ export class MainComponent implements OnInit {
           reproductionCooldown: reproductionCooldown,
           predationCounter: 0,
           alpha: 1,
-          quadtree: quadtree
+          quadtree: quadtree,
+          preyLink: null
         };
         
         // Insert boid into Quadtree
@@ -566,7 +668,28 @@ export class MainComponent implements OnInit {
       } else {
         this.errorMessage = "Boid not created, FPS too low !";
         this.errorFadeOut = 50;
+        this.dealWithLowFPS();
       }
+    }
+  }
+
+  dealWithLowFPS() {
+    if ( this.lowFPSAction == "PopulationControl" ) {
+      if ( this.totalBoids < this.totalPredators * 5 ) {
+        this.removeBoids(Math.floor(this.totalPredators * 0.95), this.predators);
+      } else {
+        this.removeBoids(Math.floor(this.totalBoids * 0.95), this.boids);
+      }
+    } else if ( this.lowFPSAction == "BudgetCuts" ) {
+      this.removeBoids(Math.floor(this.totalPredators / 2), this.predators);
+      this.removeBoids(Math.floor(this.totalBoids / 2), this.boids);
+    }
+  }
+
+  removeBoids (numberToRemove: number, listOfBoids: Boid[]) {
+    for (let i = 0; i < numberToRemove; i++) {
+      const boidToRemove = listOfBoids.shift();
+      boidToRemove!.quadtree.remove(boidToRemove!);
     }
   }
 
@@ -613,7 +736,7 @@ export class MainComponent implements OnInit {
       if (otherBoid !== currentBoid) {
         const distanceSquared = this.calculateDistanceSquared(currentBoid.position, otherBoid.position);
 
-        if (distanceSquared < separationRadiusSquared) {
+        if (distanceSquared < separationRadiusSquared && distanceSquared != 0) {
           const diffX = currentBoid.position.x - otherBoid.position.x;
           const diffY = currentBoid.position.y - otherBoid.position.y;
           const distance = Math.sqrt(distanceSquared);
