@@ -29,7 +29,7 @@ interface Point {
 
 export class MainComponent implements OnInit {
   boids: Boid[] = [];
-  numberOfBoids = 20;                // number of boids created when the simulation starts
+  numberOfBoids = 150;                // number of boids created when the simulation starts
   boidReproductionRate = 300;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
   reproductionThreshold = 1000;       // needed quiet time to nest - can be modified by the input boidReproductionModificator
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
@@ -38,20 +38,20 @@ export class MainComponent implements OnInit {
   boidEvolutionStep = 5;              // size of steps of evolution modification in percent
   boidEvolutionCap = 50;              // maximum evolution modification in percent - can be modified by the user
   boidMaxVelocity = 2;                // maximum starting velocity of the boids - can be modified by evolution
-  alignmentRadius = 50;               // radius to align with other boids - can be modified by the user
-  cohesionRadius = 50;                // radius to join other boids - can be modified by the user
-  boidsSeparationRadius = 30;         // radius to move from other boids - can be modified by the user
+  alignmentRadius = 30;               // radius to align with other boids - can be modified by the user
+  cohesionRadius = 40;                // radius to join other boids - can be modified by the user
+  boidsSeparationRadius = 20;         // radius to move from other boids - can be modified by the user
   borderDistance = 50;                // distance at which a boid start to avoid a border
   boidMaxSteeringForce = 0.1;         // maximum force to change direction
   borderAvoidanceForce = 5;           // factor to avoid screen borders
-  fleeRadius = 100;                   // distance at which a boid detects a predator - can be modified by the user
-  fleeFactor = 2;                     // importance of the flee regarding other directionnal factors - can be modified by the user
+  fleeRadius = 60;                    // distance at which a boid detects a predator - can be modified by the user
+  fleeFactor = 5;                     // importance of the flee regarding other directionnal factors - can be modified by the user
   fleeForceThreshold = 0.2;           // maximum fleeing force to have a quiet time - can be modified by the input boidReproductionModificator
   fleeReset = false;                  // does the fleeing process restarts the quiet time to 0
   lastBoidBirthPosition =  { x: 0, y: 0 };
   
   predators: Boid[] = [];
-  numberOfPredators = 10;             // number of predators created when the simulation starts
+  numberOfPredators = 3;              // number of predators created when the simulation starts
   predatorReproductionRate = 300;     // delay before a predator can reproduce again - can be modified by evolution and by the input predatorReproductionModificator
   predatorReproductionChances = 10;   // percentage of chances to reproduce - can be modified by the user
   predatorEvolutionChances = 5;       // chances for the child to evolve - can be modified by the user
@@ -129,7 +129,7 @@ export class MainComponent implements OnInit {
   }
 
   quadtree!: Quadtree;
-  rangeQueryCap = 1;
+  rangeQueryCap = 6;                            // number of neighboring boids each individual relies onto
   finalQuadtreeList: Quadtree[] = [this.quadtree];
   constructor(private el: ElementRef) {}
 
@@ -378,10 +378,10 @@ export class MainComponent implements OnInit {
           } else {
 
             let closestBoid = boid.preyLink;
-            if ( this.predatorVersatility || boid.preyLink === null ) {
+            if ( this.predatorVersatility || closestBoid === null ) {
               closestBoid = boid.quadtree.findClosestRegularBoid(boid, this.predatorsCooperativeness);
             }
-
+            
             if ( closestBoid !== null ) {
               let closestBoidPosition = { x: closestBoid.position.x, y: closestBoid.position.y };
 
@@ -412,7 +412,7 @@ export class MainComponent implements OnInit {
                 closestBoidPosition.x += closestBoid.velocity.x;
                 closestBoidPosition.y += closestBoid.velocity.y;
                 chase.x += (closestBoidPosition.x - boid.position.x) * boid.maxVelocity;
-                chase.y += (closestBoidPosition.y-boid.position.y) * boid.maxVelocity;
+                chase.y += (closestBoidPosition.y - boid.position.y) * boid.maxVelocity;
               }
             }
           }
@@ -527,7 +527,7 @@ export class MainComponent implements OnInit {
             );
           }
         } else {
-          const numberToAdd = Math.max(2,Math.min(20,this.totalBoids/10));
+          const numberToAdd = Math.max(2,Math.min(20,this.totalBoids/20));
           // Add boids with random positions and velocities
           for (let i = 0; i < numberToAdd; i++) {
             // Determine whether the new boid should be placed on a vertical or horizontal boundary
@@ -676,9 +676,9 @@ export class MainComponent implements OnInit {
   dealWithLowFPS() {
     if ( this.lowFPSAction == "PopulationControl" ) {
       if ( this.totalBoids < this.totalPredators * 5 ) {
-        this.removeBoids(Math.floor(this.totalPredators * 0.95), this.predators);
+        this.removeBoids(Math.floor(this.totalPredators * 0.05), this.predators);
       } else {
-        this.removeBoids(Math.floor(this.totalBoids * 0.95), this.boids);
+        this.removeBoids(Math.floor(this.totalBoids * 0.05), this.boids);
       }
     } else if ( this.lowFPSAction == "BudgetCuts" ) {
       this.removeBoids(Math.floor(this.totalPredators / 2), this.predators);

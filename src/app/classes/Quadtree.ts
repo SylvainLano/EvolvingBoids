@@ -75,7 +75,7 @@ export class Quadtree {
 
   move( entity: Boid, newPosition: Vec2 ): boolean {
     // Check if the new position is within the bounds of the Quadtree
-    if ( this.isInsideBounds(newPosition) || this.parent === null ) {
+    if ( ( this.isInsideBounds(newPosition) || this.parent === null )  && !this.subdivided ) {
       // Update the position of the entity
       entity.position = newPosition;
       return false;
@@ -87,7 +87,11 @@ export class Quadtree {
     entity.position = newPosition;
 
     // Reinsert the entity at the new position in the Quadtree
-    this.parent!.insert(entity);
+    if ( this.subdivided ) {
+      this.insert(entity);
+    } else {
+      this.parent!.insert(entity);
+    }
 
     return true;
   }
