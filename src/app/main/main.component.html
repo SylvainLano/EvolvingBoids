@@ -31,7 +31,14 @@
     </div>
     <canvas #chartCanvas class="chart-canvas" [ngClass]="darkMode ? 'chart-canvas-dark' : 'chart-canvas-light'"
         [style.display]="displayCharts && !demo.active ? 'block' : 'none'"></canvas>
-    <div class="demo-title"[class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
+    <div class="inspect-card" *ngIf="inspection !== null" [ngClass]="darkMode ? 'inspect-card-dark' : 'inspect-card-light'"
+        [style.left.px]="inspection.x" [style.top.px]="inspection.y">
+        <div class="inspect-title" [style.color]="inspection.color">{{ inspection.title }}</div>
+        <div>Speed : {{ inspection.speed }}</div>
+        <div>Fertility : {{ inspection.fertility }}</div>
+        <div>{{ inspection.lifeLabel }} : {{ inspection.life }}</div>
+    </div>
+    <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
@@ -160,6 +167,9 @@
                 <p class="display-options">
                     Display Boids count :
                     <input type="checkbox" [(ngModel)]="displayBoidCount" name="displayBoidCount">
+                </p>
+                <p class="display-options">
+                    Hold Shift and hover a boid to inspect it
                 </p>
                 <p class="display-options" title="Populations, and average genes compared to the species defaults">
                     Display Charts :

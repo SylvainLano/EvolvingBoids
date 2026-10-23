@@ -1,10 +1,23 @@
 import { Component, OnInit, ElementRef, NgZone, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Genome, Heritage, Point } from '../classes/Boid';
-import { CanvasRenderer } from '../classes/CanvasRenderer';
+import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
+import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
 import { Statistics } from '../classes/Statistics';
 import { ChartRenderer } from '../classes/ChartRenderer';
+
+// Content and position of the card describing the inspected boid
+interface Inspection {
+  x: number;
+  y: number;
+  title: string;
+  color: string;
+  speed: string;
+  fertility: string;
+  lifeLabel: string;
+  life: string;
+}
 
 @Component({
   selector: 'app-main',
@@ -58,6 +71,12 @@ export class MainComponent implements OnInit {
   predatorVersatility = true;         // Can predators change prey after choosing one
 
   mousePosition: Point | null = null;   // null while the mouse is not over the page, so it doesn't scare the boids
+  private pointerPosition: Point | null = null;   // the mouse position, even while it doesn't scare the boids
+  inspecting = false;                   // Shift is held: the mouse inspects the boids instead of scaring them
+  inspectRadius = 30;                   // distance in px from the mouse to pick a boid to inspect
+  inspectedBoid: Boid | null = null;
+  inspection: Inspection | null = null;
+  mutantHalos: MutantHalo[] = [];
   containerWidth = 0;
   containerHeight = 0;
   totalBoids: number = 0;
@@ -164,8 +183,13 @@ export class MainComponent implements OnInit {
       // Listeners are registered once, not at each restart
       document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
       document.addEventListener('click', (event) => this.handleMouseClick(event));
-      document.documentElement.addEventListener('mouseleave', () => this.mousePosition = null);
+      document.documentElement.addEventListener('mouseleave', () => this.mousePosition = this.pointerPosition = null);
       document.addEventListener('keydown', (event) => this.handleKeyDown(event));
+      document.addEventListener('keyup', (event) => {
+        if ( event.key === 'Shift' ) {
+          this.setInspecting(false);
+        }
+      });
       document.addEventListener('visibilitychange', () => this.demo.onVisibilityChange());
       document.addEventListener('fullscreenchange', () => this.demo.onFullscreenChange());
       window.addEventListener('resize', () => {
@@ -185,6 +209,10 @@ export class MainComponent implements OnInit {
 
   handleKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    if (event.key === 'Shift') {
+      this.setInspecting(true);
       return;
     }
     if (event.key === 'd' || event.key === 'D') {
@@ -213,6 +241,7 @@ export class MainComponent implements OnInit {
     this.stats.clear();
     this.boidGenePool = [];
     this.predatorGenePool = [];
+    this.mutantHalos = [];
     this.boids = [];
     this.predators = [];
 
@@ -311,7 +340,69 @@ export class MainComponent implements OnInit {
       return;
     }
     // Update the mouse position based on the event
-    this.mousePosition = { x: event.clientX, y: event.clientY };
+    this.pointerPosition = { x: event.clientX, y: event.clientY };
+    this.setInspecting(event.shiftKey);
+  }
+
+  // While Shift is held, the mouse inspects the boids instead of scaring them
+  setInspecting(inspecting: boolean) {
+    this.inspecting = inspecting && !this.demo.active;
+    this.mousePosition = this.inspecting ? null : this.pointerPosition;
+    if ( !this.inspecting ) {
+      this.inspectedBoid = null;
+      this.inspection = null;
+    }
+  }
+
+  // The closest living boid under the mouse, and the card describing it next to the mouse
+  updateInspection() {
+    this.inspectedBoid = null;
+    this.inspection = null;
+    const pointer = this.pointerPosition;
+    if ( !this.inspecting || pointer === null || this.demo.active ) {
+      return;
+    }
+    let closestDistance = this.inspectRadius ** 2;
+    for (const boid of [...this.boids, ...this.predators]) {
+      const distance = this.calculateDistanceSquared(boid.position, pointer);
+      if ( !boid.isDead && distance < closestDistance ) {
+        closestDistance = distance;
+        this.inspectedBoid = boid;
+      }
+    }
+    const boid = this.inspectedBoid;
+    if ( boid === null ) {
+      return;
+    }
+
+    const percent = (ratio: number) => `${ratio >= 0 ? '+' : ''}${Math.round(ratio * 100)} %`;
+    const stepsPerSecond = 1000 / this.stepDuration;
+    let lifeLabel: string;
+    let life: string;
+    if ( boid.isPredator ) {
+      const starvation = this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 * boid.geneCost;
+      lifeLabel = 'Hunger';
+      life = boid.reproductionCooldown > 0 ? 'digesting' : `${Math.round(100 * boid.predationCounter / starvation)} %`;
+    } else {
+      lifeLabel = 'Age';
+      life = this.boidLifespan > 0
+        ? `${Math.round(boid.age / stepsPerSecond)} s / ${Math.round(this.boidLifespan * boid.lifespanFactor * boid.geneCost)} s`
+        : `${Math.round(boid.age / stepsPerSecond)} s / immortal`;
+    }
+
+    // The card stays inside the window
+    const cardWidth = 230;
+    const cardHeight = 90;
+    this.inspection = {
+      x: pointer.x + 16 + cardWidth > this.containerWidth ? pointer.x - 16 - cardWidth : pointer.x + 16,
+      y: pointer.y + 16 + cardHeight > this.containerHeight ? pointer.y - 16 - cardHeight : pointer.y + 16,
+      title: `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
+      color: boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, this.darkMode),
+      speed: percent(boid.genome.maxVelocity / (boid.isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity) - 1),
+      fertility: percent(1 - boid.genome.reproductionRate / (boid.isPredator ? this.predatorReproductionRate : this.boidReproductionRate)),
+      lifeLabel,
+      life,
+    };
   }
 
   handleMouseClick(event: MouseEvent) {
@@ -357,15 +448,24 @@ export class MainComponent implements OnInit {
 
   render(timestamp: number) {
     if (this.renderer === 'canvas') {
+      // Halos last in real time
+      const now = performance.now();
+      this.mutantHalos = this.mutantHalos.filter(halo => now - halo.start < this.canvasRenderer.mutantHaloDuration);
+      this.updateInspection();
       this.canvasRenderer.render(
         [this.boids, this.predators],
         this.drawQuadtree ? this.finalQuadtreeList : null,
-        { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount }
+        { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount },
+        this.mutantHalos,
+        this.inspectedBoid
       );
+    } else {
+      this.updateInspection();
     }
 
     // The view is refreshed at each frame for the DOM renderer, and only a few times per second for the counters otherwise
-    if (this.renderer === 'dom' || timestamp - this.lastUiRefresh >= this.uiRefreshInterval) {
+    // While inspecting, the card follows the mouse at each frame too
+    if (this.renderer === 'dom' || this.inspection !== null || timestamp - this.lastUiRefresh >= this.uiRefreshInterval) {
       this.lastUiRefresh = timestamp;
       this.cdr.detectChanges();
     }
@@ -774,19 +874,26 @@ export class MainComponent implements OnInit {
 
     // Rare and larger mutations
     const evolutionChances = parent.isPredator ? this.predatorEvolutionChances/100 : this.boidEvolutionChances/100;
-    if ( Math.random() <= evolutionChances ) {
+    const isMutant = Math.random() <= evolutionChances;
+    if ( isMutant ) {
       this.mutate(genome, parent.isPredator);
     }
 
-    this.insertNewBoid (
+    const child = this.insertNewBoid (
       { x: parent.position.x, y: parent.position.y },
       { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
       parent.isPredator,
       genome,
       genome.reproductionRate * 2,
       parent.quadtree,
-      Math.max(parent.generation, partner.generation) + 1
+      Math.max(parent.generation, partner.generation) + 1,
+      isMutant
     );
+
+    // A ring spreads around the newborn mutant
+    if ( isMutant && child !== null ) {
+      this.mutantHalos.push({ boid: child, start: performance.now() });
+    }
   }
 
   // Remember the genes of the last dead individuals, so the reinforcements of an extinct species can inherit them
@@ -861,7 +968,7 @@ export class MainComponent implements OnInit {
   }
 
   insertNewBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
-    reproductionCooldown: number, quadtree: Quadtree, generation: number = 0 ) {
+    reproductionCooldown: number, quadtree: Quadtree, generation: number = 0, isMutant: boolean = false ): Boid | null {
     if ( this.errorFadeOut == 0 || this.pauseSimulation ) {
       if ( this.fps >= this.minFPS  ) {
 
@@ -874,6 +981,7 @@ export class MainComponent implements OnInit {
           fertilityTrait: -this.geneTrait(genome.reproductionRate, isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
           isPredator: isPredator,
           generation: generation,
+          isMutant: isMutant,
           age: 0,
           lifespanFactor: 0.8 + Math.random() * 0.4,
           geneCost: this.calculateGeneCost(genome, isPredator),
@@ -895,12 +1003,14 @@ export class MainComponent implements OnInit {
           this.boids.push(boid);
           this.lastBoidBirthPosition = position;
         }
+        return boid;
       } else {
         this.errorMessage = "Boid not created, FPS too low !";
         this.errorFadeOut = 50;
         this.dealWithLowFPS();
       }
     }
+    return null;
   }
 
   dealWithLowFPS() {

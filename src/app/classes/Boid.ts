@@ -26,6 +26,7 @@ export interface Boid {
   fertilityTrait: number;   // deviation of fertility from the species default, normalized in [-1, 1] - drives the color
   isPredator: boolean;
   generation: number;       // 0 for the first boids, then one more than the oldest parent
+  isMutant: boolean;        // born with a mutation, on top of the small variation of every birth
   age: number;              // in simulation steps
   lifespanFactor: number;   // random factor applied to the lifespan of regular boids, so they don't all die at the same age
   geneCost: number;         // lifespan (boids) or starvation resistance (predators) multiplier, lowered by speed and fertility

@@ -13,6 +13,8 @@
 ### The Charts and the Speed
 - Live charts show the populations, and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
 - The highest generation of each species is displayed with the boid counts  
+- A ring spreads around each newborn mutant  
+- Holding Shift and hovering a boid shows its generation, genes, and age (or hunger for a Predator), the mouse then doesn't scare the boids  
 - The simulation can be sped up x2, x4 or x8 in the Simulation Options, or with the + and - keys, to watch the evolution  
 
 ### The Demo Mode

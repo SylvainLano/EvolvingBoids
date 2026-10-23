@@ -3,6 +3,12 @@ import type { Boid } from './Boid';
 import type { Quadtree } from './Quadtree';
 import { boidColor } from './BoidColor';
 
+// A ring spreading around a newborn mutant
+export interface MutantHalo {
+  boid: Boid;
+  start: number;      // performance.now() at birth, the halo lasts in real time so it stays visible when the simulation is sped up
+}
+
 export interface RenderOptions {
   darkMode: boolean;
   glow: boolean;                  // additive blending and halos, only visible in dark mode
@@ -17,6 +23,8 @@ export class CanvasRenderer {
 
   private readonly trailOpacities = [0.12, 0.25, 0.45];   // the trail is drawn in 3 parts, more opaque near the boid
   private readonly haloOpacity = 0.35;
+  readonly mutantHaloDuration = 1200;         // in ms
+  private readonly mutantHaloRadius = 30;
   private haloSprites = new Map<string, HTMLCanvasElement>();
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -40,7 +48,7 @@ export class CanvasRenderer {
   }
 
   // Groups are drawn in order, so the last one is on top
-  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions) {
+  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[], highlighted: Boid | null) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
 
@@ -71,6 +79,41 @@ export class CanvasRenderer {
         this.drawBody(boid, options.darkMode);
       }
     }
+
+    const now = performance.now();
+    for (const halo of mutantHalos) {
+      this.drawMutantHalo(halo, now, options.darkMode);
+    }
+
+    if (highlighted !== null) {
+      ctx.globalCompositeOperation = 'source-over';
+      this.drawHighlight(highlighted, options.darkMode);
+    }
+  }
+
+  // The ring grows and fades away, following the newborn
+  private drawMutantHalo(halo: MutantHalo, now: number, darkMode: boolean) {
+    const progress = (now - halo.start) / this.mutantHaloDuration;
+    if (progress < 0 || progress >= 1) {
+      return;
+    }
+    const boid = halo.boid;
+    const ctx = this.ctx;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, darkMode, 1 - progress);
+    ctx.beginPath();
+    ctx.arc(boid.position.x, boid.position.y, 4 + this.mutantHaloRadius * progress, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // A circle around the inspected boid
+  private drawHighlight(boid: Boid, darkMode: boolean) {
+    const ctx = this.ctx;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)';
+    ctx.beginPath();
+    ctx.arc(boid.position.x, boid.position.y, this.bodyLength(boid) * 1.6, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   private drawQuadtrees(quadtrees: Quadtree[], options: RenderOptions) {
