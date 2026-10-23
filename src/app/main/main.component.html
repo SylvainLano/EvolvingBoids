@@ -1,4 +1,5 @@
-<div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''" [class.demo-cursor-hidden]="demo.active && !demo.showHint">
+<div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''" [class.demo-cursor-hidden]="demo.active && !demo.showHint"
+    [class.tool-drawing]="!demo.active && (tool === 'obstacle' || tool === 'current' || tool === 'eraser')">
     <canvas #boidCanvas class="boid-canvas" [style.display]="renderer === 'canvas' ? 'block' : 'none'"></canvas>
     <ng-container *ngIf="renderer === 'dom'">
     <div class="boid-container">
@@ -42,6 +43,14 @@
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
+<div class="tool-bar" [class.demo-hidden]="demo.active" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">
+    <button *ngFor="let item of tools; let i = index" type="button" class="tool-button"
+        [class.tool-selected]="tool === item.id" [title]="item.title" (click)="selectTool(item.id)">
+        <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
+    </button>
+    <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="clearDrawings()">Clear</button>
+</div>
+
 <div class="display-container" [class.demo-hidden]="demo.active">
 
     <div class="status-container">
@@ -67,15 +76,6 @@
                 </p>
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="simulationOptionsVisible" id="hiddenSimulationOptions">
-                <div style="display:inline;">
-                    Click to add a
-                    <label>
-                        <input type="radio" [(ngModel)]="addOnClick" value="predator" name="addOnClick"> Predator
-                    </label>
-                    <label>
-                        <input type="radio" [(ngModel)]="addOnClick" value="boid" name="addOnClick"> Boid
-                    </label>
-                </div>
                 <p [ngClass]="darkMode ? pauseSimulation ? 'simulation-blue-dark' : 'simulation-red-dark' : pauseSimulation ? 'simulation-blue-light' : 'simulation-red-light'">
                     -> <a (click)="togglePause()" id="pauseSimulation">Pause Simulation</a>
                 </p>

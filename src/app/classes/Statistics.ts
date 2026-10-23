@@ -38,7 +38,8 @@ export class Statistics {
     }
     this.stepsSinceSample = 0;
 
-    const livingPredators = predators.filter(predator => !predator.isDead);
+    // Super Predators are a tool of the user, not part of the evolution
+    const livingPredators = predators.filter(predator => !predator.isDead && !predator.isSuper);
     const boidGenes = this.averageGenes(boids, boidDefaults);
     const predatorGenes = this.averageGenes(livingPredators, predatorDefaults);
 

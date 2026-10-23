@@ -10,6 +10,15 @@
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
 
+### The Mouse Tools
+- A tool bar, or the keys 1 to 6, selects what the mouse does  
+- Boid, Predator: a click adds one, and the mouse scares the boids like a predator  
+- Super Predator: a click adds a golden predator, bigger and faster, that hunts boids and predators for 45 seconds then fades away. Predators flee it. It doesn't reproduce nor evolve, and isn't counted in the statistics  
+- Obstacle: a drag draws a wall that can't be crossed, boids and predators steer away from it and keep a small distance while following it  
+- Current: a drag draws a current that carries the boids along, faster than they swim, and slowly turns them in its direction  
+- Eraser: holding the mouse removes the boids, and the parts of the obstacles and currents, under it  
+- Obstacles and currents stay when the simulation restarts, the Clear button removes them. They are only drawn by the Canvas renderer  
+
 ### The Charts and the Speed
 - Live charts show the populations, and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
 - The highest generation of each species is displayed with the boid counts  
@@ -60,8 +69,6 @@
 - Add more evolutions 
 
 ### Futures developments and ideas
-- Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator
-- Add a way to manually remove boids
+- Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator automatically
 - Add line of sight  
-- Add drawing obstacles with the mouse  
 - Add movement anticipation for predators

@@ -1,5 +1,5 @@
 // CanvasRenderer.ts
-import type { Boid } from './Boid';
+import type { Boid, Point } from './Boid';
 import type { Quadtree } from './Quadtree';
 import { boidColor } from './BoidColor';
 
@@ -15,6 +15,15 @@ export interface RenderOptions {
   displayQuadtreeCount: boolean;
 }
 
+// What the user drew with the mouse tools
+export interface WorldDrawing {
+  obstacles: Point[][];
+  currents: Point[][];
+  currentWidth: number;                                                     // width of the band carrying the boids
+  stroke: { kind: 'obstacle' | 'current', points: Point[] } | null;         // the line being drawn
+  eraser: { position: Point, radius: number } | null;
+}
+
 export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D;
   private width = 0;
@@ -25,6 +34,7 @@ export class CanvasRenderer {
   private readonly haloOpacity = 0.35;
   readonly mutantHaloDuration = 1200;         // in ms
   private readonly mutantHaloRadius = 30;
+  private readonly currentDashSpeed = 0.03;   // in px per ms, the dashes of a current flow in its direction
   private haloSprites = new Map<string, HTMLCanvasElement>();
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -48,9 +58,10 @@ export class CanvasRenderer {
   }
 
   // Groups are drawn in order, so the last one is on top
-  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[], highlighted: Boid | null) {
+  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[], highlighted: Boid | null, world: WorldDrawing) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
+    const now = performance.now();
 
     // An opaque background, so the additive blending of the glow is computed against it
     ctx.globalCompositeOperation = 'source-over';
@@ -59,6 +70,21 @@ export class CanvasRenderer {
 
     if (quadtrees !== null) {
       this.drawQuadtrees(quadtrees, options);
+    }
+
+    // The currents flow under the boids, the obstacles stand among them
+    for (const current of world.currents) {
+      this.drawCurrent(current, world.currentWidth, now, options.darkMode);
+    }
+    for (const obstacle of world.obstacles) {
+      this.drawObstacle(obstacle, options.darkMode);
+    }
+    if (world.stroke !== null) {
+      if (world.stroke.kind === 'obstacle') {
+        this.drawObstacle(world.stroke.points, options.darkMode);
+      } else {
+        this.drawCurrent(world.stroke.points, world.currentWidth, now, options.darkMode);
+      }
     }
 
     const additive = options.darkMode && options.glow;
@@ -80,15 +106,79 @@ export class CanvasRenderer {
       }
     }
 
-    const now = performance.now();
     for (const halo of mutantHalos) {
       this.drawMutantHalo(halo, now, options.darkMode);
     }
 
+    ctx.globalCompositeOperation = 'source-over';
     if (highlighted !== null) {
-      ctx.globalCompositeOperation = 'source-over';
       this.drawHighlight(highlighted, options.darkMode);
     }
+    if (world.eraser !== null) {
+      this.drawEraser(world.eraser.position, world.eraser.radius, options.darkMode);
+    }
+  }
+
+  private color(boid: Boid, darkMode: boolean, opacity: number = 1): string {
+    return boidColor(boid.isPredator, boid.isDead, boid.speedTrait, boid.fertilityTrait, boid.alpha, darkMode, opacity, boid.isSuper);
+  }
+
+  // A wall the boids can't cross
+  private drawObstacle(points: Point[], darkMode: boolean) {
+    if (points.length < 2) {
+      return;
+    }
+    const ctx = this.ctx;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = darkMode ? '#475569' : '#94a3b8';
+    this.tracePath(points);
+    ctx.stroke();
+  }
+
+  // A translucent band, with dashes flowing in the direction of the current
+  private drawCurrent(points: Point[], width: number, now: number, darkMode: boolean) {
+    if (points.length < 2) {
+      return;
+    }
+    const ctx = this.ctx;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.lineWidth = width;
+    ctx.strokeStyle = darkMode ? 'rgba(56, 189, 248, 0.07)' : 'rgba(14, 116, 144, 0.07)';
+    this.tracePath(points);
+    ctx.stroke();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = darkMode ? 'rgba(56, 189, 248, 0.45)' : 'rgba(14, 116, 144, 0.4)';
+    ctx.setLineDash([4, 14]);
+    ctx.lineDashOffset = -now * this.currentDashSpeed;
+    this.tracePath(points);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+  }
+
+  private tracePath(points: Point[]) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+  }
+
+  private drawEraser(position: Point, radius: number, darkMode: boolean) {
+    const ctx = this.ctx;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.5)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // The ring grows and fades away, following the newborn
@@ -134,7 +224,7 @@ export class CanvasRenderer {
   }
 
   private bodyLength(boid: Boid): number {
-    return boid.isPredator ? 12 : 8;
+    return boid.isSuper ? 18 : boid.isPredator ? 12 : 8;
   }
 
   private drawTrail(boid: Boid, darkMode: boolean) {
@@ -143,7 +233,7 @@ export class CanvasRenderer {
       return;
     }
     const ctx = this.ctx;
-    ctx.lineWidth = boid.isPredator ? 2.5 : 1.5;
+    ctx.lineWidth = boid.isSuper ? 3.5 : boid.isPredator ? 2.5 : 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -155,7 +245,7 @@ export class CanvasRenderer {
       if (end <= start) {
         continue;
       }
-      ctx.strokeStyle = boidColor(boid.isPredator, boid.isDead, boid.speedTrait, boid.fertilityTrait, boid.alpha, darkMode, this.trailOpacities[part]);
+      ctx.strokeStyle = this.color(boid, darkMode, this.trailOpacities[part]);
       ctx.beginPath();
       ctx.moveTo(trail[start].x, trail[start].y);
       for (let i = start + 1; i <= end; i++) {
@@ -180,7 +270,7 @@ export class CanvasRenderer {
     const speed = round(boid.speedTrait);
     const fertility = round(boid.fertilityTrait);
     const alpha = round(boid.alpha);
-    const key = `${boid.isPredator}|${speed}|${fertility}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
+    const key = `${boid.isPredator}|${boid.isSuper}|${speed}|${fertility}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
 
     let sprite = this.haloSprites.get(key);
     if (sprite === undefined) {
@@ -189,8 +279,8 @@ export class CanvasRenderer {
       sprite.width = sprite.height = size;
       const spriteCtx = sprite.getContext('2d')!;
       const gradient = spriteCtx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      gradient.addColorStop(0, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, this.haloOpacity));
-      gradient.addColorStop(1, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, 0));
+      gradient.addColorStop(0, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, this.haloOpacity, boid.isSuper));
+      gradient.addColorStop(1, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, 0, boid.isSuper));
       spriteCtx.fillStyle = gradient;
       spriteCtx.fillRect(0, 0, size, size);
       this.haloSprites.set(key, sprite);
@@ -212,7 +302,7 @@ export class CanvasRenderer {
       ctx.lineTo(x + forward * cos - side * sin, y + forward * sin + side * cos);
     };
 
-    ctx.fillStyle = boidColor(boid.isPredator, boid.isDead, boid.speedTrait, boid.fertilityTrait, boid.alpha, darkMode);
+    ctx.fillStyle = this.color(boid, darkMode);
     ctx.beginPath();
     point(length * 0.6, 0);
     point(-length * 0.4, halfWidth);

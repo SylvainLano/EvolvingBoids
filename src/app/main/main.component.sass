@@ -88,6 +88,69 @@
   background-color: rgba(15, 23, 42, 0.8)
   border: 1px solid #223044
 
+.tool-drawing
+  cursor: crosshair
+
+.tool-bar
+  position: absolute
+  top: 10px
+  left: 50%
+  transform: translateX(-50%)
+  z-index: 10
+  display: flex
+  gap: 4px
+  padding: 4px
+  border-radius: 8px
+  font-family: Monaco, monospace
+  user-select: none
+  opacity: 0.6
+  transition: opacity 0.3s ease
+
+  &:hover
+    opacity: 1
+
+.tool-bar-light
+  background-color: rgba(255, 255, 255, 0.85)
+  border: 1px solid lightgrey
+
+.tool-bar-dark
+  background-color: rgba(15, 23, 42, 0.85)
+  border: 1px solid #223044
+
+.tool-button
+  font-family: inherit
+  font-size: 11px
+  padding: 4px 8px
+  border-radius: 5px
+  border: 1px solid transparent
+  background: none
+  color: inherit
+  cursor: pointer
+
+.tool-bar-light .tool-button
+  color: #333333
+
+  &:hover
+    background-color: rgba(0, 0, 0, 0.06)
+
+.tool-bar-dark .tool-button
+  color: #dddddd
+
+  &:hover
+    background-color: rgba(255, 255, 255, 0.08)
+
+.tool-bar-light .tool-selected
+  border-color: #64748b
+  background-color: rgba(0, 0, 0, 0.08)
+
+.tool-bar-dark .tool-selected
+  border-color: #94a3b8
+  background-color: rgba(255, 255, 255, 0.12)
+
+.tool-key
+  opacity: 0.5
+  margin-right: 5px
+
 .inspect-card
   position: absolute
   z-index: 9

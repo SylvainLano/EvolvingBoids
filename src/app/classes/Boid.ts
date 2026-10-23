@@ -25,9 +25,10 @@ export interface Boid {
   speedTrait: number;       // deviation of maxVelocity from the species default, normalized in [-1, 1] - drives the color
   fertilityTrait: number;   // deviation of fertility from the species default, normalized in [-1, 1] - drives the color
   isPredator: boolean;
+  isSuper: boolean;         // a Super Predator, added with the mouse: it hunts boids and predators for a while, then fades away
   generation: number;       // 0 for the first boids, then one more than the oldest parent
   isMutant: boolean;        // born with a mutation, on top of the small variation of every birth
-  age: number;              // in simulation steps
+  age: number;              // in simulation steps, for regular boids and Super Predators
   lifespanFactor: number;   // random factor applied to the lifespan of regular boids, so they don't all die at the same age
   geneCost: number;         // lifespan (boids) or starvation resistance (predators) multiplier, lowered by speed and fertility
   alpha: number;

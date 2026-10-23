@@ -2,10 +2,14 @@ import { Component, OnInit, ElementRef, NgZone, ChangeDetectorRef, ViewChild } f
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Genome, Heritage, Point } from '../classes/Boid';
 import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
+import { SegmentField } from '../classes/SegmentField';
 import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
 import { Statistics } from '../classes/Statistics';
 import { ChartRenderer } from '../classes/ChartRenderer';
+
+// What a click or a drag with the mouse does
+type Tool = 'boid' | 'predator' | 'superPredator' | 'obstacle' | 'current' | 'eraser';
 
 // Content and position of the card describing the inspected boid
 interface Inspection {
@@ -82,7 +86,32 @@ export class MainComponent implements OnInit {
   totalBoids: number = 0;
   totalPredators: number = 0;
 
-  addOnClick: string = 'predator';
+  // Mouse tools, selected in the tool bar or with the keys 1 to 6
+  tool: Tool = 'predator';
+  readonly tools: { id: Tool, label: string, title: string }[] = [
+    { id: 'boid', label: 'Boid', title: 'Click to add a boid' },
+    { id: 'predator', label: 'Predator', title: 'Click to add a predator' },
+    { id: 'superPredator', label: 'Super Predator', title: 'Click to add a super predator: it hunts boids and predators for 45 seconds' },
+    { id: 'obstacle', label: 'Obstacle', title: 'Drag to draw a wall the boids can\'t cross' },
+    { id: 'current', label: 'Current', title: 'Drag to draw a current carrying the boids along' },
+    { id: 'eraser', label: 'Eraser', title: 'Hold and move to remove boids, obstacles and currents' },
+  ];
+  obstacleAvoidRadius = 35;           // distance at which boids start to steer away from an obstacle, beyond the distance they need to turn
+  obstacleAvoidanceForce = 3;         // importance of avoiding obstacles regarding other directional factors
+  obstacles = new SegmentField(this.obstacleAvoidRadius + 5);   // the reach includes the move of a step, to detect the crossings
+  currentRadius = 30;                 // half width of a current
+  currentStrength = 1.5;              // speed in px per step given by a current at its center
+  currentAlignment = 0.05;            // how fast a current turns the boids in its direction
+  currents = new SegmentField(this.currentRadius);
+  eraserRadius = 30;
+  superPredatorMaxVelocity = 3.2;
+  superPredatorLifetime = 45;         // in seconds
+  superPredatorCaptureDistance = 8;
+  superPredatorMaxSteeringForce = 0.15;
+  superFleeRadius = 120;              // distance at which predators flee a Super Predator
+  private stroke: { kind: 'obstacle' | 'current', points: Point[] } | null = null;   // the line being drawn
+  private mousePressed = false;
+  private readonly strokeStep = 12;   // minimum distance in px between two points of a drawn line
   boidOptionsVisible: boolean = false;
   predatorOptionsVisible: boolean = false;
   displayOptionsVisible: boolean = false;
@@ -183,6 +212,8 @@ export class MainComponent implements OnInit {
       // Listeners are registered once, not at each restart
       document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
       document.addEventListener('click', (event) => this.handleMouseClick(event));
+      document.addEventListener('mousedown', (event) => this.handleMouseDown(event));
+      window.addEventListener('mouseup', () => this.handleMouseUp());
       document.documentElement.addEventListener('mouseleave', () => this.mousePosition = this.pointerPosition = null);
       document.addEventListener('keydown', (event) => this.handleKeyDown(event));
       document.addEventListener('keyup', (event) => {
@@ -215,7 +246,12 @@ export class MainComponent implements OnInit {
       this.setInspecting(true);
       return;
     }
-    if (event.key === 'd' || event.key === 'D') {
+    if (/^[1-9]$/.test(event.key) && !this.demo.active) {
+      const tool = this.tools[Number(event.key) - 1];
+      if (tool) {
+        this.selectTool(tool.id);
+      }
+    } else if (event.key === 'd' || event.key === 'D') {
       this.demo.toggle();
     } else if (event.key === 'Escape') {
       this.demo.stop();
@@ -299,6 +335,8 @@ export class MainComponent implements OnInit {
       boid.trail = boid.trail.map(scale);
       this.quadtree.insert(boid);
     }
+    this.obstacles.transform(scale);
+    this.currents.transform(scale);
     this.finalQuadtreeList = this.quadtree.retrieveFinalQuadtrees();
   }
 
@@ -342,12 +380,84 @@ export class MainComponent implements OnInit {
     // Update the mouse position based on the event
     this.pointerPosition = { x: event.clientX, y: event.clientY };
     this.setInspecting(event.shiftKey);
+
+    // The line being drawn gets a new point every few pixels
+    if ( this.stroke !== null ) {
+      const last = this.stroke.points[this.stroke.points.length - 1];
+      if ( SegmentField.distanceSquared(last, this.pointerPosition) >= this.strokeStep ** 2 ) {
+        this.stroke.points.push(this.pointerPosition);
+      }
+    }
+  }
+
+  // Clicks on the options or the tool bar are not meant for the tools
+  isOnInterface(event: MouseEvent): boolean {
+    const target = event.target as Element | null;
+    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar') !== null;
+  }
+
+  selectTool(tool: Tool) {
+    this.tool = tool;
+    this.stroke = null;
+    this.setInspecting(this.inspecting);
+  }
+
+  // The mouse scares the boids like a predator, only with the tools adding creatures
+  get toolScares(): boolean {
+    return this.tool === 'boid' || this.tool === 'predator' || this.tool === 'superPredator';
+  }
+
+  handleMouseDown(event: MouseEvent) {
+    if ( this.demo.active || event.button !== 0 || this.isOnInterface(event) ) {
+      return;
+    }
+    this.mousePressed = true;
+    const point = { x: event.clientX, y: event.clientY };
+    if ( this.tool === 'obstacle' || this.tool === 'current' ) {
+      this.stroke = { kind: this.tool, points: [point] };
+    } else if ( this.tool === 'eraser' ) {
+      this.erase(point);
+    }
+  }
+
+  // A drawn line becomes an obstacle or a current when the mouse is released
+  handleMouseUp() {
+    if ( this.stroke !== null ) {
+      const points = this.stroke.points;
+      const last = points[points.length - 1];
+      if ( this.pointerPosition !== null && SegmentField.distanceSquared(last, this.pointerPosition) >= 9 ) {
+        points.push(this.pointerPosition);
+      }
+      (this.stroke.kind === 'obstacle' ? this.obstacles : this.currents).add(points);
+      this.stroke = null;
+    }
+    this.mousePressed = false;
+  }
+
+  // The eraser removes the boids (they fade away), and the parts of the obstacles and currents under it
+  erase(center: Point) {
+    const radiusSquared = this.eraserRadius ** 2;
+    for (const boid of [...this.boids, ...this.predators]) {
+      if ( !boid.isDead && this.calculateDistanceSquared(boid.position, center) < radiusSquared ) {
+        boid.isDead = true;
+        if ( !boid.isSuper ) {
+          this.rememberGenes(boid);
+        }
+      }
+    }
+    this.obstacles.erase(center, this.eraserRadius);
+    this.currents.erase(center, this.eraserRadius);
+  }
+
+  clearDrawings() {
+    this.obstacles.clear();
+    this.currents.clear();
   }
 
   // While Shift is held, the mouse inspects the boids instead of scaring them
   setInspecting(inspecting: boolean) {
     this.inspecting = inspecting && !this.demo.active;
-    this.mousePosition = this.inspecting ? null : this.pointerPosition;
+    this.mousePosition = this.inspecting || !this.toolScares ? null : this.pointerPosition;
     if ( !this.inspecting ) {
       this.inspectedBoid = null;
       this.inspection = null;
@@ -379,7 +489,10 @@ export class MainComponent implements OnInit {
     const stepsPerSecond = 1000 / this.stepDuration;
     let lifeLabel: string;
     let life: string;
-    if ( boid.isPredator ) {
+    if ( boid.isSuper ) {
+      lifeLabel = 'Lifetime';
+      life = `${Math.round(boid.age / stepsPerSecond)} s / ${this.superPredatorLifetime} s`;
+    } else if ( boid.isPredator ) {
       const starvation = this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 * boid.geneCost;
       lifeLabel = 'Hunger';
       life = boid.reproductionCooldown > 0 ? 'digesting' : `${Math.round(100 * boid.predationCounter / starvation)} %`;
@@ -396,10 +509,14 @@ export class MainComponent implements OnInit {
     this.inspection = {
       x: pointer.x + 16 + cardWidth > this.containerWidth ? pointer.x - 16 - cardWidth : pointer.x + 16,
       y: pointer.y + 16 + cardHeight > this.containerHeight ? pointer.y - 16 - cardHeight : pointer.y + 16,
-      title: `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
-      color: boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, this.darkMode),
+      title: boid.isSuper
+        ? 'Super Predator'
+        : `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
+      color: boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, this.darkMode, 1, boid.isSuper),
       speed: percent(boid.genome.maxVelocity / (boid.isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity) - 1),
-      fertility: percent(1 - boid.genome.reproductionRate / (boid.isPredator ? this.predatorReproductionRate : this.boidReproductionRate)),
+      fertility: boid.isSuper
+        ? '-'
+        : percent(1 - boid.genome.reproductionRate / (boid.isPredator ? this.predatorReproductionRate : this.boidReproductionRate)),
       lifeLabel,
       life,
     };
@@ -410,21 +527,49 @@ export class MainComponent implements OnInit {
       this.demo.onMouseMove();
       return;
     }
-    const isPredator = this.addOnClick == "predator";
-    // Create a new boid at the mouse click position
-    this.insertNewBoid (
-      { x: event.clientX, y: event.clientY },
+    if ( this.isOnInterface(event) ) {
+      return;
+    }
+    const position = { x: event.clientX, y: event.clientY };
+    if ( this.tool === 'boid' || this.tool === 'predator' ) {
+      const isPredator = this.tool === 'predator';
+      // Create a new boid at the mouse click position
+      this.insertNewBoid (
+        position,
+        { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
+        isPredator,
+        this.createGenome(isPredator),
+        0,
+        this.quadtree
+      );
+    } else if ( this.tool === 'superPredator' ) {
+      this.addSuperPredator(position);
+    }
+  }
+
+  // A Super Predator doesn't evolve nor reproduce, it hunts for a while then fades away
+  addSuperPredator(position: Point) {
+    const superPredator = this.insertNewBoid (
+      position,
       { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-      isPredator,
-      this.createGenome(isPredator),
+      true,
+      { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
       0,
       this.quadtree
     );
+    if ( superPredator !== null ) {
+      superPredator.isSuper = true;
+    }
   }
 
   // Animation loop: the simulation advances by fixed steps, so its speed doesn't depend on the screen refresh rate
   updateBoids(timestamp: number) {
     this.demo.update(timestamp);
+
+    // The eraser keeps erasing while the mouse is held, even without moving
+    if ( this.mousePressed && this.tool === 'eraser' && this.pointerPosition !== null && !this.demo.active ) {
+      this.erase(this.pointerPosition);
+    }
 
     // The time scale runs more steps per frame to speed up the simulation
     // Long gaps (hidden tab, very slow frame) are not caught up, to avoid a burst of steps
@@ -457,7 +602,16 @@ export class MainComponent implements OnInit {
         this.drawQuadtree ? this.finalQuadtreeList : null,
         { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount },
         this.mutantHalos,
-        this.inspectedBoid
+        this.inspectedBoid,
+        {
+          obstacles: this.obstacles.polylines,
+          currents: this.currents.polylines,
+          currentWidth: this.currentRadius * 2,
+          stroke: this.stroke,
+          eraser: this.tool === 'eraser' && this.pointerPosition !== null && !this.demo.active
+            ? { position: this.pointerPosition, radius: this.eraserRadius }
+            : null,
+        }
       );
     } else {
       this.updateInspection();
@@ -486,7 +640,8 @@ export class MainComponent implements OnInit {
     }
 
     this.totalBoids = this.boids.length;
-    this.totalPredators = this.predators.length;
+    // Super Predators are a tool of the user, they don't count as predators
+    this.totalPredators = this.predators.filter(predator => !predator.isSuper).length;
 
     this.dealWithDepletion();
 
@@ -582,8 +737,11 @@ export class MainComponent implements OnInit {
         }
 
 
-        let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor);
-        let velocityChangeY = (separation.y + alignment.y + cohesion.y + avoidBorders.y + fleePredators.y * this.fleeFactor);
+        // Steer away from the obstacles drawn with the mouse
+        const avoidObstacles = this.avoidObstacles(boid);
+
+        let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor + avoidObstacles.x * this.obstacleAvoidanceForce);
+        let velocityChangeY = (separation.y + alignment.y + cohesion.y + avoidBorders.y + fleePredators.y * this.fleeFactor + avoidObstacles.y * this.obstacleAvoidanceForce);
 
         // Limit the maximum steering force
         const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
@@ -610,6 +768,10 @@ export class MainComponent implements OnInit {
           boid.velocity.x *= ratio;
           boid.velocity.y *= ratio;
         }
+
+      } else if ( boid.isSuper ) {
+
+        this.moveSuperPredator(boid, avoidBorders);
 
       } else {
 
@@ -682,15 +844,28 @@ export class MainComponent implements OnInit {
           }
         }
 
-        
+        // Predators flee the Super Predators, whatever they were doing
+        const threat = this.closestSuperPredator(boid);
+        if ( threat !== null ) {
+          const away = this.calculateDirection(threat.position, boid.position);
+          chase = { x: away.x, y: away.y };
+          maxVelocity = boid.genome.maxVelocity;
+          maxSteeringForce = this.predatorMaxSteeringForce * 1.5;
+        }
+
         if ( chase.x == 0 && chase.y == 0 && this.totalBoids != 0 ) {
           // Update predator's velocity to move towards the last Boid Birth Position
           chase.x += ((this.lastBoidBirthPosition.x - boid.position.x) + avoidBorders.x) * maxVelocity;
           chase.y += ((this.lastBoidBirthPosition.y - boid.position.y) + avoidBorders.y) * maxVelocity;
         }
 
-        let velocityChangeX = (separation.x + chase.x );
-        let velocityChangeY = (separation.y + chase.y );
+        // Steer away from the obstacles: the chase grows with the distance to the prey, so does the avoidance,
+        // otherwise a predator would press against a wall hiding its prey instead of keeping a small distance
+        const avoidObstacles = this.avoidObstacles(boid);
+        const avoidanceWeight = this.obstacleAvoidanceForce * Math.max(1, Math.sqrt(chase.x ** 2 + chase.y ** 2));
+
+        let velocityChangeX = (separation.x + chase.x + avoidObstacles.x * avoidanceWeight);
+        let velocityChangeY = (separation.y + chase.y + avoidObstacles.y * avoidanceWeight);
 
         // Limit the maximum steering force
         const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
@@ -726,8 +901,12 @@ export class MainComponent implements OnInit {
         
       }
     
-      // Update position based on velocity
-      const newPosition: Point = { x: boid.position.x + boid.velocity.x, y: boid.position.y + boid.velocity.y };
+      // Update position based on velocity, carried by the currents, without crossing the obstacles
+      const flow = this.currentFlow(boid);
+      let newPosition: Point = { x: boid.position.x + boid.velocity.x + flow.x, y: boid.position.y + boid.velocity.y + flow.y };
+      if ( !this.obstacles.isEmpty ) {
+        newPosition = this.collideWithObstacles(boid, newPosition);
+      }
 
       // Update the boid's position
       boid.quadtree.move( boid, newPosition );
@@ -744,6 +923,170 @@ export class MainComponent implements OnInit {
 
     }
   }
+  }
+
+  // A Super Predator hunts the closest boid or predator, until its lifetime is over
+  moveSuperPredator(superPredator: Boid, avoidBorders: Point) {
+    superPredator.age++;
+    if ( superPredator.age >= this.superPredatorLifetime * (1000 / this.stepDuration) ) {
+      superPredator.isDead = true;
+      return;
+    }
+
+    const steering = { x: avoidBorders.x, y: avoidBorders.y };
+    const target = this.closestTargetOfSuperPredator(superPredator);
+    if ( target !== null ) {
+      if ( this.calculateDistanceSquared(superPredator.position, target.position) < this.superPredatorCaptureDistance ** 2 ) {
+        this.devour(target);
+      } else {
+        // It anticipates the movement of its target
+        const direction = this.calculateDirection(superPredator.position, {
+          x: target.position.x + target.velocity.x * 5,
+          y: target.position.y + target.velocity.y * 5,
+        });
+        steering.x += direction.x;
+        steering.y += direction.y;
+      }
+    }
+
+    // Steer away from the obstacles, like the other predators
+    const avoidObstacles = this.avoidObstacles(superPredator);
+    steering.x += avoidObstacles.x * this.obstacleAvoidanceForce;
+    steering.y += avoidObstacles.y * this.obstacleAvoidanceForce;
+
+    // Limit the steering force, then the velocity
+    const steeringSquared = steering.x ** 2 + steering.y ** 2;
+    if ( steeringSquared > this.superPredatorMaxSteeringForce ** 2 ) {
+      const ratio = this.superPredatorMaxSteeringForce / Math.sqrt(steeringSquared);
+      steering.x *= ratio;
+      steering.y *= ratio;
+    }
+    superPredator.velocity.x += steering.x;
+    superPredator.velocity.y += steering.y;
+    const speedSquared = superPredator.velocity.x ** 2 + superPredator.velocity.y ** 2;
+    if ( speedSquared > superPredator.genome.maxVelocity ** 2 ) {
+      const ratio = superPredator.genome.maxVelocity / Math.sqrt(speedSquared);
+      superPredator.velocity.x *= ratio;
+      superPredator.velocity.y *= ratio;
+    }
+  }
+
+  closestTargetOfSuperPredator(superPredator: Boid): Boid | null {
+    let closest: Boid | null = null;
+    let closestDistance = Infinity;
+    for (const group of [this.boids, this.predators]) {
+      for (const other of group) {
+        if ( other.isDead || other.isSuper ) {
+          continue;
+        }
+        const distance = this.calculateDistanceSquared(superPredator.position, other.position);
+        if ( distance < closestDistance ) {
+          closestDistance = distance;
+          closest = other;
+        }
+      }
+    }
+    return closest;
+  }
+
+  // An eaten boid disappears, an eaten predator fades away
+  devour(target: Boid) {
+    if ( target.preyLink !== null ) {
+      target.preyLink.preyLink = null;
+    }
+    if ( target.isPredator ) {
+      target.isDead = true;
+    } else {
+      target.quadtree.remove(target);
+      this.boids = this.boids.filter(other => other !== target);
+    }
+    this.rememberGenes(target);
+  }
+
+  // The closest Super Predator a predator should flee, if any
+  closestSuperPredator(predator: Boid): Boid | null {
+    let closest: Boid | null = null;
+    let closestDistance = this.superFleeRadius ** 2;
+    for (const other of this.predators) {
+      if ( other.isSuper && !other.isDead ) {
+        const distance = this.calculateDistanceSquared(predator.position, other.position);
+        if ( distance < closestDistance ) {
+          closestDistance = distance;
+          closest = other;
+        }
+      }
+    }
+    return closest;
+  }
+
+  // Boids and predators steer away from the obstacles near them, the closer the stronger
+  avoidObstacles(boid: Boid): Point {
+    const avoid = { x: 0, y: 0 };
+    if ( this.obstacles.isEmpty ) {
+      return avoid;
+    }
+    for (const segment of this.obstacles.near(boid.position)) {
+      const closest = SegmentField.closestPoint(boid.position, segment);
+      const distance = Math.sqrt(SegmentField.distanceSquared(boid.position, closest));
+      if ( distance > 0 && distance < this.obstacleAvoidRadius ) {
+        const weight = (1 - distance / this.obstacleAvoidRadius) / distance;
+        avoid.x += (boid.position.x - closest.x) * weight;
+        avoid.y += (boid.position.y - closest.y) * weight;
+      }
+    }
+    return avoid;
+  }
+
+  // Currents carry the boids faster than they swim, and slowly turn them in their direction
+  currentFlow(boid: Boid): Point {
+    const flow = { x: 0, y: 0 };
+    if ( this.currents.isEmpty ) {
+      return flow;
+    }
+    for (const segment of this.currents.near(boid.position)) {
+      const closest = SegmentField.closestPoint(boid.position, segment);
+      const distance = Math.sqrt(SegmentField.distanceSquared(boid.position, closest));
+      if ( distance < this.currentRadius ) {
+        const direction = this.calculateDirection(segment.a, segment.b);
+        const weight = 1 - distance / this.currentRadius;
+        flow.x += direction.x * weight;
+        flow.y += direction.y * weight;
+      }
+    }
+    const magnitude = Math.sqrt(flow.x ** 2 + flow.y ** 2);
+    if ( magnitude === 0 ) {
+      return flow;
+    }
+    // Near the joints of a line, the segments don't add up beyond the strength of the current
+    const strength = this.currentStrength * Math.min(1, magnitude) / magnitude;
+    flow.x *= strength;
+    flow.y *= strength;
+    if ( !boid.isDead ) {
+      boid.velocity.x += flow.x * this.currentAlignment;
+      boid.velocity.y += flow.y * this.currentAlignment;
+    }
+    return flow;
+  }
+
+  // Obstacles can't be crossed: a boid about to cross one slides along it instead
+  collideWithObstacles(boid: Boid, target: Point): Point {
+    const start = boid.position;
+    const segments = this.obstacles.near(start);
+    const hit = segments.find(segment => SegmentField.crosses(start, target, segment));
+    if ( hit === undefined ) {
+      return target;
+    }
+
+    // Only the part of the move and of the velocity along the wall is kept
+    const wall = this.calculateDirection(hit.a, hit.b);
+    const along = (target.x - start.x) * wall.x + (target.y - start.y) * wall.y;
+    const velocityAlong = boid.velocity.x * wall.x + boid.velocity.y * wall.y;
+    boid.velocity = { x: wall.x * velocityAlong, y: wall.y * velocityAlong };
+
+    // Pushed slightly away from the wall, on its own side, so it never ends up exactly on the line
+    const away = this.calculateDirection(SegmentField.closestPoint(start, hit), start);
+    const slid = { x: start.x + wall.x * along + away.x * 0.5, y: start.y + wall.y * along + away.y * 0.5 };
+    return segments.some(segment => SegmentField.crosses(start, slid, segment)) ? start : slid;
   }
 
   dealWithDepletion() {
@@ -908,7 +1251,7 @@ export class MainComponent implements OnInit {
   // Genes for a group of reinforcements: copied from living individuals, or from recently dead ones if the species is extinct
   // They are all picked before any insertion, otherwise the first reinforcement would be the only living source of the others
   inheritGenes ( isPredator: boolean, count: number ): Heritage[] {
-    const living = isPredator ? this.predators.filter(predator => !predator.isDead) : this.boids;
+    const living = isPredator ? this.predators.filter(predator => !predator.isDead && !predator.isSuper) : this.boids;
     const pool: Heritage[] = living.length > 0 ? living : (isPredator ? this.predatorGenePool : this.boidGenePool);
     return Array.from({ length: count }, () => {
       if ( pool.length === 0 ) {
@@ -980,6 +1323,7 @@ export class MainComponent implements OnInit {
           // a lower reproduction rate means a more fertile boid
           fertilityTrait: -this.geneTrait(genome.reproductionRate, isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
           isPredator: isPredator,
+          isSuper: false,
           generation: generation,
           isMutant: isMutant,
           age: 0,
