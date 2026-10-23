@@ -12,6 +12,12 @@ export interface Genome {
   reproductionRate: number;   // delay before being able to reproduce again (lower is more fertile)
 }
 
+// What a reinforcement inherits from an existing or recently dead individual
+export interface Heritage {
+  genome: Genome;
+  generation: number;
+}
+
 export interface Boid {
   position: Point;
   velocity: Point;
@@ -19,6 +25,10 @@ export interface Boid {
   speedTrait: number;       // deviation of maxVelocity from the species default, normalized in [-1, 1] - drives the color
   fertilityTrait: number;   // deviation of fertility from the species default, normalized in [-1, 1] - drives the color
   isPredator: boolean;
+  generation: number;       // 0 for the first boids, then one more than the oldest parent
+  age: number;              // in simulation steps
+  lifespanFactor: number;   // random factor applied to the lifespan of regular boids, so they don't all die at the same age
+  geneCost: number;         // lifespan (boids) or starvation resistance (predators) multiplier, lowered by speed and fertility
   alpha: number;
   isDead: boolean;
   reproductionCooldown: number;

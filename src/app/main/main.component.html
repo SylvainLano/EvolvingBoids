@@ -29,15 +29,17 @@
     <div class="messages-container" [class.demo-hidden]="demo.active">
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
     </div>
-    <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
+    <canvas #chartCanvas class="chart-canvas" [ngClass]="darkMode ? 'chart-canvas-dark' : 'chart-canvas-light'"
+        [style.display]="displayCharts && !demo.active ? 'block' : 'none'"></canvas>
+    <div class="demo-title"[class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
 <div class="display-container" [class.demo-hidden]="demo.active">
 
     <div class="status-container">
-        <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }}</p>
-        <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }}</p>
+        <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }} - Generation {{ stats.maxBoidGeneration }}</p>
+        <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }} - Generation {{ stats.maxPredatorGeneration }}</p>
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'" *ngIf="displayFPSCount">FPS: {{ fps }}</p>
     </div>
 
@@ -72,6 +74,12 @@
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
                     -> <a (click)="initializeSimulation()" id="restartSimulation">Restart Simulation</a>
+                </p>
+                <p title="Speed up the simulation to watch the evolution, also with the + and - keys">
+                    Speed :
+                    <label *ngFor="let scale of timeScales">
+                        <input type="radio" [(ngModel)]="timeScale" [value]="scale" name="timeScale"> x{{ scale }}
+                    </label>
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-blue-dark' : 'simulation-blue-light'"
                     title="A never ending screensaver, in fullscreen. Also with the D key, or the url index.html?demo">
@@ -153,6 +161,10 @@
                     Display Boids count :
                     <input type="checkbox" [(ngModel)]="displayBoidCount" name="displayBoidCount">
                 </p>
+                <p class="display-options" title="Populations, and average genes compared to the species defaults">
+                    Display Charts :
+                    <input type="checkbox" [(ngModel)]="displayCharts" name="displayCharts">
+                </p>
                 <p class="display-options">
                     Display FPS count :
                     <input type="checkbox" [(ngModel)]="displayFPSCount" name="displayFPSCount">
@@ -199,6 +211,14 @@
                     <mat-slider [(ngModel)]="boidReproductionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="boidReproductionChances" ngDefaultControl>
                     <input matSliderThumb [value]="boidReproductionChances">
+                    </mat-slider>
+                </p>
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
+                    title="Average age at which a boid dies, +/- 20 %. 0 makes the boids immortal.">
+                    Boids Lifespan in s :
+                    <mat-slider [(ngModel)]="boidLifespan" min="0" max="600" step="30" showTickMarks discrete
+                    name="boidLifespan" ngDefaultControl>
+                    <input matSliderThumb [value]="boidLifespan">
                     </mat-slider>
                 </p>
                 <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">

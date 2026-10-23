@@ -1,6 +1,5 @@
 // DemoMode.ts
 import type { MainComponent } from '../main/main.component';
-import type { Genome } from './Boid';
 
 // Simulation parameters that change from one scene to another, morphed smoothly during the transitions
 type SceneParams = Pick<MainComponent,
@@ -40,7 +39,7 @@ const SCENES: DemoScene[] = [
 
 // Settings changed by the demo, restored when it stops
 const SAVED_SETTINGS = [
-  'darkMode', 'glow', 'drawQuadtree', 'renderer', 'simulationMode', 'lowFPSAction', 'pauseSimulation',
+  'darkMode', 'glow', 'drawQuadtree', 'renderer', 'simulationMode', 'lowFPSAction', 'pauseSimulation', 'timeScale',
   'boidReproductionChances', 'predatorReproductionChances',
   'alignmentRadius', 'cohesionRadius', 'boidsSeparationRadius', 'fleeRadius', 'fleeFactor', 'predatorsSeparationRadius', 'trailLength',
 ] as const;
@@ -58,7 +57,8 @@ export class DemoMode {
   readonly titleDuration = 6000;
   readonly hintDuration = 2500;
   readonly directorInterval = 1000;
-  readonly reproductionChances = 10;      // reproduction chances in percent, when the population is not too large
+  readonly boidReproductionChances = 30;      // reproduction chances in percent, when the population is not too large
+  readonly predatorReproductionChances = 10;
   readonly minFPSToGrow = 45;             // under this, the population stops growing
 
   private saved: SavedSettings = {};
@@ -83,7 +83,7 @@ export class DemoMode {
     this.saved = Object.fromEntries(SAVED_SETTINGS.map(key => [key, this.sim[key]])) as SavedSettings;
     Object.assign(this.sim, {
       darkMode: true, glow: true, drawQuadtree: false, renderer: 'canvas',
-      simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false,
+      simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false, timeScale: 1,
     });
     this.sim.mousePosition = null;
 
@@ -211,8 +211,8 @@ export class DemoMode {
     const predators = this.sim.predators.filter(predator => !predator.isDead).length;
     const canGrow = this.sim.fps >= this.minFPSToGrow;
 
-    this.sim.boidReproductionChances = boids < scene.maxBoids && canGrow ? this.reproductionChances : 0;
-    this.sim.predatorReproductionChances = predators < scene.maxPredators ? this.reproductionChances : 0;
+    this.sim.boidReproductionChances = boids < scene.maxBoids && canGrow ? this.boidReproductionChances : 0;
+    this.sim.predatorReproductionChances = predators < scene.maxPredators ? this.predatorReproductionChances : 0;
 
     if (boids < scene.minBoids && timestamp - this.lastFlockArrival > 4000) {
       this.lastFlockArrival = timestamp;
@@ -229,14 +229,15 @@ export class DemoMode {
     }
   }
 
-  // A group enters from a random border, heading inside, with the genes of the current population
+  // A group enters from a random border, heading inside, with the genes of the current (or recently dead) population
   private arrive(isPredator: boolean, count: number) {
     const width = this.sim.containerWidth;
     const height = this.sim.containerHeight;
     const border = Math.floor(Math.random() * 4);
     const along = 0.2 + Math.random() * 0.6;
     const heading = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }][border];
-    const population = isPredator ? this.sim.predators.filter(predator => !predator.isDead) : this.sim.boids;
+
+    const heritages = this.sim.inheritGenes(isPredator, count);
 
     for (let i = 0; i < count; i++) {
       const spread = (Math.random() - 0.5) * 80;
@@ -247,8 +248,7 @@ export class DemoMode {
         { x: along * width + spread, y: depth },
         { x: along * width + spread, y: height - depth },
       ][border];
-      const parent = population[Math.floor(Math.random() * population.length)];
-      const genome: Genome = parent ? { ...parent.genome } : this.sim.createGenome(isPredator);
+      const { genome, generation } = heritages[i];
       const rate = isPredator ? this.sim.predatorReproductionRate : this.sim.boidReproductionRate;
 
       this.sim.insertNewBoid(
@@ -257,7 +257,8 @@ export class DemoMode {
         isPredator,
         genome,
         Math.random() * rate,
-        this.sim.quadtree
+        this.sim.quadtree,
+        generation
       );
     }
   }

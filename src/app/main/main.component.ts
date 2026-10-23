@@ -1,8 +1,10 @@
 import { Component, OnInit, ElementRef, NgZone, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { Quadtree } from '../classes/Quadtree';
-import { Boid, Genome, Point } from '../classes/Boid';
+import { Boid, Genome, Heritage, Point } from '../classes/Boid';
 import { CanvasRenderer } from '../classes/CanvasRenderer';
 import { DemoMode } from '../classes/DemoMode';
+import { Statistics } from '../classes/Statistics';
+import { ChartRenderer } from '../classes/ChartRenderer';
 
 @Component({
   selector: 'app-main',
@@ -14,12 +16,19 @@ export class MainComponent implements OnInit {
   boids: Boid[] = [];
   numberOfBoids = 150;                // number of boids created when the simulation starts
   boidReproductionRate = 300;         // delay before a boid can reproduce again - can be modified by evolution and by the input boidReproductionModificator
-  reproductionThreshold = 1000;       // needed quiet time to nest - can be modified by the input boidReproductionModificator
+  reproductionThreshold = 600;        // needed quiet time to nest - can be modified by the input boidReproductionModificator
+  boidLifespan = 180;                 // average lifespan in seconds (+/- 20 %), 0 for immortal boids - can be modified by the user
+  partnerAngleThreshold = 0.3;        // maximum angle in radians between the directions of two partners
+  infiniteMinBoids = 30;              // in Infinite mode, reinforcements arrive when there are fewer boids than this, enough for them to find partners
+  areaPerBoid = 4000;                // screen area in px² per boid when the screen is full, boids stop reproducing at this density
+  geneCostFactor = 1.5;               // each +10 % of speed or fertility costs 15 % of lifespan (boids) or starvation resistance (predators)
+  minGeneCost = 0.2;                  // the gene cost never shortens a life below 20 %
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
-  boidReproductionChances = 10;       // percentage of chances to reproduce - can be modified by the user
+  boidReproductionChances = 30;     // percentage of chances to reproduce - can be modified by the user
   boidEvolutionChances = 5;           // chances for the child to evolve - can be modified by the user
   boidEvolutionStep = 5;              // size of steps of evolution modification in percent
   boidEvolutionCap = 50;              // maximum evolution modification in percent - can be modified by the user
+  birthVariation = 2;                 // random variation of every gene at each birth, in percent, for boids and predators
   boidMaxVelocity = 2;                // maximum starting velocity of the boids - can be modified by evolution
   alignmentRadius = 30;               // radius to align with other boids - can be modified by the user
   cohesionRadius = 40;                // radius to join other boids - can be modified by the user
@@ -129,12 +138,24 @@ export class MainComponent implements OnInit {
   private canvasRenderer!: CanvasRenderer;
   private resizeTimeout?: ReturnType<typeof setTimeout>;
   demo = new DemoMode(this);
+
+  timeScale = 1;                                // simulation speed: number of simulated seconds per real second
+  readonly timeScales = [1, 2, 4, 8];
+  displayCharts = true;                         // live charts of the populations and of the average genes
+  stats = new Statistics();
+  genePoolSize = 30;                            // number of dead individuals whose genes are remembered, per species
+  private boidGenePool: Heritage[] = [];
+  private predatorGenePool: Heritage[] = [];
+  private chartRenderer!: ChartRenderer;
+  private lastChartRefresh = 0;
+  @ViewChild('chartCanvas', { static: true }) chartCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
 
   constructor(private el: ElementRef, private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.canvasRenderer = new CanvasRenderer(this.boidCanvas.nativeElement);
+    this.chartRenderer = new ChartRenderer(this.chartCanvas.nativeElement);
     this.initializeSimulation();
 
     // The animation loop and the mouse listeners run outside of Angular, so they don't trigger a change detection
@@ -170,6 +191,10 @@ export class MainComponent implements OnInit {
       this.demo.toggle();
     } else if (event.key === 'Escape') {
       this.demo.stop();
+    } else if ((event.key === '+' || event.key === '-') && !this.demo.active) {
+      // Next or previous simulation speed
+      const index = this.timeScales.indexOf(this.timeScale) + (event.key === '+' ? 1 : -1);
+      this.timeScale = this.timeScales[Math.max(0, Math.min(this.timeScales.length - 1, index))];
     }
   }
 
@@ -185,6 +210,9 @@ export class MainComponent implements OnInit {
     this.containerHeight = boidContainer.offsetHeight;
     this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 24 );
     this.finalQuadtreeList = [this.quadtree];
+    this.stats.clear();
+    this.boidGenePool = [];
+    this.predatorGenePool = [];
     this.boids = [];
     this.predators = [];
 
@@ -198,6 +226,11 @@ export class MainComponent implements OnInit {
         Math.random() * this.boidReproductionRate,
         this.quadtree
       );
+    }
+
+    // The first boids have random ages, so they don't all die of old age at the same time
+    for (const boid of this.boids) {
+      boid.age = Math.random() * this.boidLifespan * (1000 / this.stepDuration) * 0.8;
     }
 
     // Initialize predators with random positions, velocities, and reproduction rate
@@ -302,8 +335,10 @@ export class MainComponent implements OnInit {
   updateBoids(timestamp: number) {
     this.demo.update(timestamp);
 
+    // The time scale runs more steps per frame to speed up the simulation
     // Long gaps (hidden tab, very slow frame) are not caught up, to avoid a burst of steps
-    this.stepAccumulator += Math.max(0, Math.min(timestamp - this.lastStepTime, this.stepDuration * this.maxStepsPerFrame));
+    const elapsed = (timestamp - this.lastStepTime) * this.timeScale;
+    this.stepAccumulator += Math.max(0, Math.min(elapsed, this.stepDuration * this.maxStepsPerFrame * this.timeScale));
     this.lastStepTime = timestamp;
 
     while (this.stepAccumulator >= this.stepDuration) {
@@ -334,6 +369,12 @@ export class MainComponent implements OnInit {
       this.lastUiRefresh = timestamp;
       this.cdr.detectChanges();
     }
+
+    // The charts only change once per simulated second
+    if (this.displayCharts && !this.demo.active && timestamp - this.lastChartRefresh >= this.uiRefreshInterval) {
+      this.lastChartRefresh = timestamp;
+      this.chartRenderer.render(this.stats.samples, this.darkMode);
+    }
   }
 
   stepSimulation() {
@@ -349,6 +390,13 @@ export class MainComponent implements OnInit {
 
     this.dealWithDepletion();
 
+    this.stats.step(
+      this.boids,
+      this.predators,
+      { maxVelocity: this.boidMaxVelocity, reproductionRate: this.boidReproductionRate },
+      { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate }
+    );
+
     const allBoids = [...this.boids, ...this.predators];
 
     // Boids behavior rules
@@ -356,6 +404,15 @@ export class MainComponent implements OnInit {
 
       // Avoid borders: Redirect away from the borders
       let avoidBorders = this.avoidBorders(boid);
+
+      // Regular boids die of old age, a lifespan of 0 makes them immortal
+      if ( !boid.isPredator && !boid.isDead ) {
+        boid.age++;
+        if ( this.boidLifespan > 0 && boid.age >= this.boidLifespan * (1000 / this.stepDuration) * boid.lifespanFactor * boid.geneCost ) {
+          boid.isDead = true;
+          this.rememberGenes(boid);
+        }
+      }
 
       if ( boid.isDead ) {
 
@@ -372,9 +429,13 @@ export class MainComponent implements OnInit {
         boid.alpha = Math.max(0, boid.alpha - 0.01);
 
         if ( boid.alpha <= 0.01 ) {
-          // Remove the starving predator
+          // Remove the starving predator, or the boid dead of old age
           boid.quadtree.remove(boid);
-          this.predators = this.predators.filter(predator => predator !== boid);
+          if ( boid.isPredator ) {
+            this.predators = this.predators.filter(predator => predator !== boid);
+          } else {
+            this.boids = this.boids.filter(other => other !== boid);
+          }
         }
 
       } else if (!boid.isPredator) {
@@ -466,8 +527,9 @@ export class MainComponent implements OnInit {
 
         if ( boid.reproductionCooldown == 0 ) {
 
-          if (boid.predationCounter! >= ( this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 ) ) {
+          if (boid.predationCounter! >= ( this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 * boid.geneCost ) ) {
             boid.isDead = true;
+            this.rememberGenes(boid);
           } else {
 
             let closestBoid = boid.preyLink;
@@ -482,6 +544,7 @@ export class MainComponent implements OnInit {
               if ( this.calculateDistanceSquared(boid.position, closestBoidPosition) < this.captureDistance**2 ) {
                   // Remove the captured boid
                   closestBoid.quadtree.remove(closestBoid);
+                  this.rememberGenes(closestBoid);
                   this.boids = this.boids.filter(b => b !== closestBoid);
                   
                   if ( Math.random() <= this.predatorReproductionChances/100 ) {
@@ -584,14 +647,18 @@ export class MainComponent implements OnInit {
   }
 
   dealWithDepletion() {
-    if ( this.totalBoids === 0 || this.totalPredators === 0 ) {
+    // In Infinite mode, a few boids left can neither reproduce nor let the reinforcements come, so they arrive under a threshold
+    const boidsDepleted = this.simulationMode === "Infinite" ? this.totalBoids < this.infiniteMinBoids : this.totalBoids === 0;
+    if ( boidsDepleted || this.totalPredators === 0 ) {
       if ( this.simulationMode === "DeathMatch" ) {
         this.pauseSimulation = true;
       } else if ( this.simulationMode === "Retry" ) {
         this.restartSimulation();
       } else if ( this.simulationMode === "Infinite" ) {
-        if ( this.totalBoids === 0 ) {
-          const numberToAdd = Math.max(4,Math.min(100,this.totalPredators));
+        if ( boidsDepleted ) {
+          // Enough reinforcements to get back above the threshold at once
+          const numberToAdd = Math.max(4, this.infiniteMinBoids - this.totalBoids, Math.min(100,this.totalPredators));
+          const heritages = this.inheritGenes(false, Math.ceil(numberToAdd));
           // Add boids with random positions and velocities
           for (let i = 0; i < numberToAdd; i++) {
             // Determine whether the new boid should be placed on a vertical or horizontal boundary
@@ -602,27 +669,30 @@ export class MainComponent implements OnInit {
             if (onVerticalBoundary) {
               // Place on the left or right boundary
               position = {
-                x: Math.random() < 0.5 ? -5 : this.containerWidth + 5,
+                x: Math.random() < 0.5 ? 2 : this.containerWidth - 2,
                 y: Math.random() * this.containerHeight,
               };
             } else {
               // Place on the top or bottom boundary
               position = {
                 x: Math.random() * this.containerWidth,
-                y: Math.random() < 0.5 ? -5 : this.containerHeight + 5,
+                y: Math.random() < 0.5 ? 2 : this.containerHeight - 2,
               };
             }
+            const { genome, generation } = heritages[i];
             this.insertNewBoid (
               position,
               { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
               false,
-              this.createGenome(false),
+              genome,
               Math.random() * this.boidReproductionRate,
-              this.quadtree
+              this.quadtree,
+              generation
             );
           }
         } else {
           const numberToAdd = Math.max(2,Math.min(20,this.totalBoids/20));
+          const heritages = this.inheritGenes(true, Math.ceil(numberToAdd));
           // Add boids with random positions and velocities
           for (let i = 0; i < numberToAdd; i++) {
             // Determine whether the new boid should be placed on a vertical or horizontal boundary
@@ -633,23 +703,25 @@ export class MainComponent implements OnInit {
             if (onVerticalBoundary) {
               // Place on the left or right boundary
               position = {
-                x: Math.random() < 0.5 ? -5 : this.containerWidth + 5,
+                x: Math.random() < 0.5 ? 2 : this.containerWidth - 2,
                 y: Math.random() * this.containerHeight,
               };
             } else {
               // Place on the top or bottom boundary
               position = {
                 x: Math.random() * this.containerWidth,
-                y: Math.random() < 0.5 ? -5 : this.containerHeight + 5,
+                y: Math.random() < 0.5 ? 2 : this.containerHeight - 2,
               };
             }
+            const { genome, generation } = heritages[i];
             this.insertNewBoid (
               position,
               { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
               true,
-              this.createGenome(true),
+              genome,
               Math.random() * this.predatorReproductionRate,
-              this.quadtree
+              this.quadtree,
+              generation
             );
           }
         }
@@ -698,6 +770,9 @@ export class MainComponent implements OnInit {
       reproductionRate: (Math.random() < 0.5 ? parent : partner).genome.reproductionRate,
     };
 
+    this.varyAtBirth(genome, parent.isPredator);
+
+    // Rare and larger mutations
     const evolutionChances = parent.isPredator ? this.predatorEvolutionChances/100 : this.boidEvolutionChances/100;
     if ( Math.random() <= evolutionChances ) {
       this.mutate(genome, parent.isPredator);
@@ -709,8 +784,32 @@ export class MainComponent implements OnInit {
       parent.isPredator,
       genome,
       genome.reproductionRate * 2,
-      parent.quadtree
+      parent.quadtree,
+      Math.max(parent.generation, partner.generation) + 1
     );
+  }
+
+  // Remember the genes of the last dead individuals, so the reinforcements of an extinct species can inherit them
+  rememberGenes ( boid: Boid ) {
+    const pool = boid.isPredator ? this.predatorGenePool : this.boidGenePool;
+    pool.push({ genome: boid.genome, generation: boid.generation });
+    if ( pool.length > this.genePoolSize ) {
+      pool.shift();
+    }
+  }
+
+  // Genes for a group of reinforcements: copied from living individuals, or from recently dead ones if the species is extinct
+  // They are all picked before any insertion, otherwise the first reinforcement would be the only living source of the others
+  inheritGenes ( isPredator: boolean, count: number ): Heritage[] {
+    const living = isPredator ? this.predators.filter(predator => !predator.isDead) : this.boids;
+    const pool: Heritage[] = living.length > 0 ? living : (isPredator ? this.predatorGenePool : this.boidGenePool);
+    return Array.from({ length: count }, () => {
+      if ( pool.length === 0 ) {
+        return { genome: this.createGenome(isPredator), generation: 0 };
+      }
+      const source = pool[Math.floor(Math.random() * pool.length)];
+      return { genome: { ...source.genome }, generation: source.generation };
+    });
   }
 
   // Default genome of the species, slightly varied so that natural selection has something to work on from the start
@@ -726,13 +825,34 @@ export class MainComponent implements OnInit {
   // Alter one random gene by one evolution step, for better or worse, within the evolution cap
   mutate ( genome: Genome, isPredator: boolean ) {
     const evolutionStep = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
-    const evolutionCap = (isPredator ? this.predatorEvolutionCap : this.boidEvolutionCap) / 100;
     const gene: keyof Genome = Math.random() < 0.5 ? 'maxVelocity' : 'reproductionRate';
+    this.setGene(genome, gene, isPredator, genome[gene] * (Math.random() < 0.5 ? 1 + evolutionStep : 1 - evolutionStep));
+  }
+
+  // Small random variation of every gene at each birth, so natural selection always has some diversity to work on
+  varyAtBirth ( genome: Genome, isPredator: boolean ) {
+    const variation = this.birthVariation / 100;
+    for (const gene of ['maxVelocity', 'reproductionRate'] as const) {
+      this.setGene(genome, gene, isPredator, genome[gene] * (1 + (Math.random() * 2 - 1) * variation));
+    }
+  }
+
+  // Set a gene, kept within the evolution cap around the species default
+  setGene ( genome: Genome, gene: keyof Genome, isPredator: boolean, value: number ) {
+    const evolutionCap = (isPredator ? this.predatorEvolutionCap : this.boidEvolutionCap) / 100;
     const defaultValue = gene === 'maxVelocity'
       ? (isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity)
       : (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
-    const mutated = genome[gene] * (Math.random() < 0.5 ? 1 + evolutionStep : 1 - evolutionStep);
-    genome[gene] = Math.min(defaultValue * (1 + evolutionCap), Math.max(defaultValue * (1 - evolutionCap), mutated));
+    genome[gene] = Math.min(defaultValue * (1 + evolutionCap), Math.max(defaultValue * (1 - evolutionCap), value));
+  }
+
+  // Trade-off of the genes: faster or more fertile boids live shorter, more fertile predators starve faster
+  // (fast predators already get hungry faster). With a cost above 1, the best genes depend on the predation:
+  // boids that are eaten young gain from living fast, boids that die of old age gain from living long
+  calculateGeneCost ( genome: Genome, isPredator: boolean ): number {
+    const speed = isPredator ? 0 : genome.maxVelocity / this.boidMaxVelocity - 1;
+    const fertility = 1 - genome.reproductionRate / (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
+    return Math.max(this.minGeneCost, 1 - this.geneCostFactor * (speed + fertility));
   }
 
   // Normalized deviation of a gene from its species default, in [-1, 1], used to color the boid
@@ -741,7 +861,7 @@ export class MainComponent implements OnInit {
   }
 
   insertNewBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
-    reproductionCooldown: number, quadtree: Quadtree ) {
+    reproductionCooldown: number, quadtree: Quadtree, generation: number = 0 ) {
     if ( this.errorFadeOut == 0 || this.pauseSimulation ) {
       if ( this.fps >= this.minFPS  ) {
 
@@ -753,6 +873,10 @@ export class MainComponent implements OnInit {
           // a lower reproduction rate means a more fertile boid
           fertilityTrait: -this.geneTrait(genome.reproductionRate, isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
           isPredator: isPredator,
+          generation: generation,
+          age: 0,
+          lifespanFactor: 0.8 + Math.random() * 0.4,
+          geneCost: this.calculateGeneCost(genome, isPredator),
           isDead: false,
           reproductionCooldown: reproductionCooldown,
           predationCounter: 0,
@@ -796,13 +920,14 @@ export class MainComponent implements OnInit {
     for (let i = 0; i < numberToRemove; i++) {
       const boidToRemove = listOfBoids.shift();
       boidToRemove!.quadtree.remove(boidToRemove!);
+      this.rememberGenes(boidToRemove!);
     }
   }
 
   tryToReproduce(boid: Boid) {
     const reproductionRadiusSquared = this.reproductionRadius**2;
     const reproductionPartners = this.boids.filter(otherBoid => {
-      if ( otherBoid === boid ) {
+      if ( otherBoid === boid || otherBoid.isDead ) {
         return false;
       }
       const distanceSquared = this.calculateDistanceSquared(boid.position, otherBoid.position);
@@ -817,7 +942,10 @@ export class MainComponent implements OnInit {
 
       const partner = reproductionPartners[Math.floor(Math.random() * reproductionPartners.length)];
 
-      if ( Math.random() <= this.boidReproductionChances/100 ) {
+      // Logistic growth: the more crowded the screen, the lower the chances, down to 0 at its carrying capacity
+      const carryingCapacity = this.containerWidth * this.containerHeight / this.areaPerBoid;
+      const crowding = Math.max(0, 1 - this.boids.length / carryingCapacity);
+      if ( Math.random() <= this.boidReproductionChances/100 * crowding ) {
         this.giveBirth ( boid, partner );
       }
 
@@ -836,7 +964,6 @@ export class MainComponent implements OnInit {
   }
 
   areVelocitiesSimilar(velocity1: { x: number, y: number }, velocity2: { x: number, y: number }): boolean {
-    const angleThreshold = 0.1;
     const dotProduct = velocity1.x * velocity2.x + velocity1.y * velocity2.y;
     const magnitudesProduct = Math.sqrt(velocity1.x ** 2 + velocity1.y ** 2) * Math.sqrt(velocity2.x ** 2 + velocity2.y ** 2);
     if ( magnitudesProduct === 0 ) {
@@ -844,7 +971,7 @@ export class MainComponent implements OnInit {
     }
     // Clamp to avoid NaN from floating point rounding
     const cosineSimilarity = Math.max(-1, Math.min(1, dotProduct / magnitudesProduct));
-    return Math.acos(cosineSimilarity) < angleThreshold;
+    return Math.acos(cosineSimilarity) < this.partnerAngleThreshold;
   }
 
   calculatePredatorSeparation(currentBoid: Boid, boids: Boid[], separationRadius: number) {

@@ -231,10 +231,10 @@ export class Quadtree {
 
         // Check if the circular region (x, y, radius) intersects with the quadtree node
         if (current.intersectsCircle(boid.position.x, boid.position.y, radius)) {
-            // Filter entities based on the onlyPredators parameter
+            // Filter entities based on the onlyPredators parameter, dying ones are ignored
             const filteredEntities = predators
-                ? current.entities.filter(entity => entity.isPredator)
-                : current.entities.filter(entity => !entity.isPredator);
+                ? current.entities.filter(entity => entity.isPredator && !entity.isDead)
+                : current.entities.filter(entity => !entity.isPredator && !entity.isDead);
 
             result.push(...filteredEntities);
 
@@ -290,8 +290,8 @@ export class Quadtree {
       if ( !checked.has(currentRegion) ) {
         checked.add( currentRegion );
 
-        // Filter out predators
-        const regularBoids = currentRegion.entities.filter((boid) => !boid.isPredator);
+        // Filter out predators, and boids dying of old age
+        const regularBoids = currentRegion.entities.filter((boid) => !boid.isPredator && !boid.isDead);
       
         if (regularBoids.length > 0) {
           // If there are regular boids in the current region, return the closest one

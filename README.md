@@ -10,6 +10,11 @@
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
 
+### The Charts and the Speed
+- Live charts show the populations, and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
+- The highest generation of each species is displayed with the boid counts  
+- The simulation can be sped up x2, x4 or x8 in the Simulation Options, or with the + and - keys, to watch the evolution  
+
 ### The Demo Mode
 - A never ending screensaver, started with the D key, the Simulation Options, or the url `index.html?demo`  
 - The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
@@ -25,7 +30,9 @@
 ### The Boids
 - Regular Boids have alignment, cohesion and separation  
 - Predators only have separation  
-- Regular Boids need a partner to reproduce, and both should have had some quiet time with no fleeing  
+- Regular Boids need a partner to reproduce, heading roughly the same way, and both should have had some quiet time with no fleeing  
+- Regular Boids reproduce less as the screen gets crowded (logistic growth), and stop at 1 boid per 4000 px²  
+- Regular Boids die of old age after about 3 minutes (+/- 20 %), the lifespan can be modified in the options, 0 makes them immortal  
 - Predators only need to eat to reproduce, but must calm down after eating  
 - All Boids carry a Genome with a Maximum Velocity and a Reproduction Rate, that can be altered by evolution  
 - All Boids have a Reproduction Chance, an Evolution Chance and an Evolution Cap that can be modified in the options  
@@ -34,6 +41,10 @@
 - Each child inherits every gene from one of its two parents (Predators have a single parent)  
 - A mutation alters one gene by one step, for better or worse, within the Evolution Cap  
 - The first Boids start with a slight variation around the species defaults, so natural selection can work right away  
+- Every gene varies slightly (+/- 2 %) at each birth, on top of the rarer and larger mutations  
+- Genes have a cost: each +10 % of speed or fertility shortens the life of a Regular Boid by 15 %, and each +10 % of fertility shortens the starvation resistance of a Predator by 15 % (fast Predators already get hungry faster). The best genes depend on the predation: boids that are eaten young gain from living fast, boids that die of old age gain from living long  
+- In Infinite mode, reinforcements arrive when fewer than 30 Regular Boids are left (a few boids can hardly find partners), or when no Predator is left  
+- Reinforcements (Infinite mode, Demo Mode) inherit the genes of the living population, or of the last 30 dead individuals if the species is extinct  
 - The Reproduction Rate shortens both the cooldown and, for Regular Boids, the quiet time needed to nest  
 - The color is derived from the genes:  
   - Speed shifts the hue: Regular Boids go from violet (slow) to blue to cyan (fast), Predators from orange (slow) to red to magenta (fast)  
