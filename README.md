@@ -13,13 +13,18 @@
 - Predators only have separation  
 - Regular Boids need a partner to reproduce, and both should have had some quiet time with no fleeing  
 - Predators only need to eat to reproduce, but must calm down after eating  
-- All Boids have a Maximum Velocity and a Reproduction Rate that can be altered by evolution  
+- All Boids carry a Genome with a Maximum Velocity and a Reproduction Rate, that can be altered by evolution  
 - All Boids have a Reproduction Chance, an Evolution Chance and an Evolution Cap that can be modified in the options  
 
 ### Evolutions
-- When Regular Boids evolve, they become a lighter blue tone  
-- When Predators evolve, they become pink
-- Evolution can alter Maximum Velocity or Reproduction Rate, for better or worse
+- Each child inherits every gene from one of its two parents (Predators have a single parent)  
+- A mutation alters one gene by one step, for better or worse, within the Evolution Cap  
+- The first Boids start with a slight variation around the species defaults, so natural selection can work right away  
+- The Reproduction Rate shortens both the cooldown and, for Regular Boids, the quiet time needed to nest  
+- The color is derived from the genes:  
+  - Speed shifts the hue: Regular Boids go from violet (slow) to blue to cyan (fast), Predators from orange (slow) to red to magenta (fast)  
+  - Fertility shifts the lightness: the more fertile, the brighter  
+  - A digesting Predator gets paler
 
 ## Development
 

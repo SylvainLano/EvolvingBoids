@@ -1,25 +1,6 @@
 import { Component, OnInit, ElementRef } from '@angular/core';
 import { Quadtree } from '../classes/Quadtree';
-
-interface Boid {
-  position: { x: number, y: number };
-  velocity: { x: number, y: number };
-  maxVelocity: number;
-  isPredator: boolean;
-  isEvolved: boolean;
-  alpha: number;
-  isDead: boolean;
-  reproductionRate: number;
-  reproductionCooldown: number;
-  predationCounter: number; // predationCounter is time without predation for boids, and time without predating for predators
-  quadtree: Quadtree;
-  preyLink : Boid | null;   // for Regular Boids, the Predator that chase them, for Predators, the prey !
-}
-
-interface Point {
-  x: number;
-  y: number;
-}
+import { Boid, Genome, Point } from '../classes/Boid';
 
 @Component({
   selector: 'app-main',
@@ -65,7 +46,7 @@ export class MainComponent implements OnInit {
   predatorsCooperativeness = true;    // Do Predator cooperative to chase different preys
   predatorVersatility = true;         // Can predators change prey after choosing one
 
-  mousePosition = { x: 0, y: 0 };
+  mousePosition: Point | null = null;   // null while the mouse is not over the page, so it doesn't scare the boids
   containerWidth = 0;
   containerHeight = 0;
   totalBoids: number = 0;
@@ -95,6 +76,11 @@ export class MainComponent implements OnInit {
   private fpsValues: number[] = [];
   private lastFrameTime = performance.now();
   private fpsUpdateInterval: number = 100;
+
+  stepDuration = 1000 / 60;                     // duration of a simulation step in ms - the simulation runs at 60 steps per second
+  maxStepsPerFrame = 4;                         // maximum number of steps computed for a single frame
+  private stepAccumulator = 0;
+  private lastStepTime = performance.now();
 
   updateFPS(timestamp: number) {
     const elapsed = timestamp - this.lastFrameTime;
@@ -130,10 +116,16 @@ export class MainComponent implements OnInit {
 
   quadtree!: Quadtree;
   rangeQueryCap = 6;                            // number of neighboring boids each individual relies onto
+  traitScale = 0.5;                             // gene deviation from the species default that gives the most extreme color
   finalQuadtreeList: Quadtree[] = [this.quadtree];
   constructor(private el: ElementRef) {}
 
   ngOnInit(): void {
+    // Listeners are registered once, not at each restart
+    document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+    document.addEventListener('click', (event) => this.handleMouseClick(event));
+    document.documentElement.addEventListener('mouseleave', () => this.mousePosition = null);
+
     this.initializeSimulation();
     
     // Start the animation loop
@@ -145,9 +137,6 @@ export class MainComponent implements OnInit {
   }
 
   initializeSimulation() {
-
-    document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-    document.addEventListener('click', (event) => this.handleMouseClick(event));
 
     // Get the dimensions of the boid container
     const boidContainer = this.el.nativeElement.querySelector('.boid-container');
@@ -163,9 +152,8 @@ export class MainComponent implements OnInit {
       this.insertNewBoid (
         { x: Math.random() * this.containerWidth, y: Math.random() * this.containerHeight },
         { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-        this.boidMaxVelocity,
         false,
-        this.boidReproductionRate,
+        this.createGenome(false),
         Math.random() * this.boidReproductionRate,
         this.quadtree
       );
@@ -176,9 +164,8 @@ export class MainComponent implements OnInit {
       this.insertNewBoid (
         { x: Math.random() * this.containerWidth, y: Math.random() * this.containerHeight },
         { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-        this.predatorMaxVelocity,
         true,
-        this.predatorReproductionRate,
+        this.createGenome(true),
         Math.random() * this.predatorReproductionRate,
         this.quadtree
       );
@@ -222,27 +209,37 @@ export class MainComponent implements OnInit {
   }
 
   handleMouseClick(event: MouseEvent) {
-    let isPredator = false;
-    let maxVelocity = this.boidMaxVelocity;
-    let reproductionRate = this.boidReproductionRate;
-    if ( this.addOnClick == "predator") {
-      isPredator = true;
-      maxVelocity = this.predatorMaxVelocity;
-      reproductionRate = this.predatorReproductionRate;
-    }
+    const isPredator = this.addOnClick == "predator";
     // Create a new boid at the mouse click position
     this.insertNewBoid (
       { x: event.clientX, y: event.clientY },
       { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-      maxVelocity,
       isPredator,
-      reproductionRate,
+      this.createGenome(isPredator),
       0,
       this.quadtree
     );
   }
 
+  // Animation loop: the simulation advances by fixed steps, so its speed doesn't depend on the screen refresh rate
   updateBoids(timestamp: number) {
+    // Long gaps (hidden tab, very slow frame) are not caught up, to avoid a burst of steps
+    this.stepAccumulator += Math.max(0, Math.min(timestamp - this.lastStepTime, this.stepDuration * this.maxStepsPerFrame));
+    this.lastStepTime = timestamp;
+
+    while (this.stepAccumulator >= this.stepDuration) {
+      this.stepSimulation();
+      this.stepAccumulator -= this.stepDuration;
+    }
+
+    // Update FPS
+    this.updateFPS(timestamp);
+
+    // Call requestAnimationFrame to update the next frame
+    requestAnimationFrame((nextTimestamp) => this.updateBoids(nextTimestamp));
+  }
+
+  stepSimulation() {
 
     if ( this.pauseSimulation === false ) {
 
@@ -301,11 +298,10 @@ export class MainComponent implements OnInit {
         // Alignment: Align the velocity with the average velocity of nearby boids
         let { alignment, cohesion, separation } = this.calculateFlock(boid, nearbyBoids);
 
-        boid.reproductionCooldown = Math.max ( 0, Math.min(boid.reproductionCooldown - 1, this.boidReproductionRate * (11 - this.boidReproductionModificator)/10  ));
-        
+        boid.reproductionCooldown = Math.max ( 0, Math.min(boid.reproductionCooldown - 1, boid.genome.reproductionRate * (11 - this.boidReproductionModificator)/10  ));
+
         // Check for quiet times and proximity for reproduction
-        if ( boid.predationCounter >= ( this.reproductionThreshold * (11 - this.boidReproductionModificator)/10 )
-          && boid.reproductionCooldown == 0 ) {
+        if ( this.isReadyToNest(boid) ) {
           this.tryToReproduce(boid);
           cohesion.x *= 1.2;
           cohesion.y *= 1.2;
@@ -351,8 +347,8 @@ export class MainComponent implements OnInit {
 
         // Limit the velocity to a maximum value to prevent unrealistic speeds
         const speedSquared = (boid.velocity.x ** 2 + boid.velocity.y ** 2);
-        if (speedSquared > boid.maxVelocity ** 2) {
-          const ratio = boid.maxVelocity / Math.sqrt(speedSquared);
+        if (speedSquared > boid.genome.maxVelocity ** 2) {
+          const ratio = boid.genome.maxVelocity / Math.sqrt(speedSquared);
           boid.velocity.x *= ratio;
           boid.velocity.y *= ratio;
         }
@@ -365,7 +361,7 @@ export class MainComponent implements OnInit {
         let separation = this.calculatePredatorSeparation(boid, nearbyPredators, this.predatorsSeparationRadius);
 
         let chase = { x: 0, y: 0 };
-        let maxVelocity = boid.maxVelocity;
+        let maxVelocity = boid.genome.maxVelocity;
         let maxSteeringForce = this.predatorMaxSteeringForce;
         
         // Limit the velocity to a maximum value to prevent unrealistic speeds
@@ -395,7 +391,7 @@ export class MainComponent implements OnInit {
                     this.giveBirth ( boid );
                   }
 
-                  boid.reproductionCooldown = this.predatorReproductionRate;
+                  boid.reproductionCooldown = boid.genome.reproductionRate;
                   boid.predationCounter = 0;
                   boid.preyLink = null;
               } else {
@@ -411,16 +407,16 @@ export class MainComponent implements OnInit {
                 // Update predator's velocity to move towards the closest boid
                 closestBoidPosition.x += closestBoid.velocity.x;
                 closestBoidPosition.y += closestBoid.velocity.y;
-                chase.x += (closestBoidPosition.x - boid.position.x) * boid.maxVelocity;
-                chase.y += (closestBoidPosition.y - boid.position.y) * boid.maxVelocity;
+                chase.x += (closestBoidPosition.x - boid.position.x) * boid.genome.maxVelocity;
+                chase.y += (closestBoidPosition.y - boid.position.y) * boid.genome.maxVelocity;
               }
             }
           }
 
         } else {
-          boid.reproductionCooldown = Math.max ( 0, Math.min(boid.reproductionCooldown - 1, this.predatorReproductionRate * (11 - this.predatorReproductionModificator)/10  ));          
-          boid.alpha = Math.max ( boid.alpha * 0.99, 1 - Math.min(0.7, boid.reproductionCooldown/this.predatorReproductionRate));
-          maxVelocity = Math.max(Math.sqrt(speedBeforeSquared) * 0.99, boid.maxVelocity / 3);
+          boid.reproductionCooldown = Math.max ( 0, Math.min(boid.reproductionCooldown - 1, boid.genome.reproductionRate * (11 - this.predatorReproductionModificator)/10  ));
+          boid.alpha = Math.max ( boid.alpha * 0.99, 1 - Math.min(0.7, boid.reproductionCooldown/boid.genome.reproductionRate));
+          maxVelocity = Math.max(Math.sqrt(speedBeforeSquared) * 0.99, boid.genome.maxVelocity / 3);
           if (avoidBorders.x === 0 && avoidBorders.y === 0) {
             maxSteeringForce /= 10;
           }
@@ -461,7 +457,7 @@ export class MainComponent implements OnInit {
           boid.velocity.y *= ratio;
           if ( boid.reproductionCooldown == 0 && boid.isPredator ) {
             // Increase starvation counter if the predator didn't eat
-            boid.predationCounter+= boid.maxVelocity;
+            boid.predationCounter+= boid.genome.maxVelocity;
           }
         } else if ( boid.reproductionCooldown == 0 && boid.isPredator ) {
           // Increase starvation counter if the predator didn't eat
@@ -475,16 +471,9 @@ export class MainComponent implements OnInit {
 
       // Update the boid's position
       boid.quadtree.move( boid, newPosition );
-      
+
     }
   }
-
-    // Update FPS
-    this.updateFPS(timestamp);
-  
-    // Call requestAnimationFrame to update the next frame
-    requestAnimationFrame((nextTimestamp) => this.updateBoids(nextTimestamp));
-
   }
 
   dealWithDepletion() {
@@ -519,9 +508,8 @@ export class MainComponent implements OnInit {
             this.insertNewBoid (
               position,
               { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-              this.boidMaxVelocity,
               false,
-              this.boidReproductionRate,
+              this.createGenome(false),
               Math.random() * this.boidReproductionRate,
               this.quadtree
             );
@@ -551,9 +539,8 @@ export class MainComponent implements OnInit {
             this.insertNewBoid (
               position,
               { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-              this.predatorMaxVelocity,
               true,
-              this.predatorReproductionRate,
+              this.createGenome(true),
               Math.random() * this.predatorReproductionRate,
               this.quadtree
             );
@@ -571,84 +558,95 @@ export class MainComponent implements OnInit {
       for (let predator of predators) {
           const distanceSquared = this.calculateDistanceSquared(currentBoid.position, predator.position);
 
-          if (distanceSquared < fleeRadiusSquared) {
+          if (distanceSquared < fleeRadiusSquared && distanceSquared != 0) {
               const diffX = currentBoid.position.x - predator.position.x;
               const diffY = currentBoid.position.y - predator.position.y;
               const distance = Math.sqrt(distanceSquared);
-              fleePredatorsForce.x = diffX / distance;
-              fleePredatorsForce.y = diffY / distance;
+              // Forces add up: being surrounded by several predators is scarier
+              fleePredatorsForce.x += diffX / distance;
+              fleePredatorsForce.y += diffY / distance;
           }
       }
 
-      const distanceSquared = this.calculateDistanceSquared(currentBoid.position, this.mousePosition);
+      // The mouse acts as a predator
+      if (this.mousePosition !== null) {
+        const distanceSquared = this.calculateDistanceSquared(currentBoid.position, this.mousePosition);
 
-      if (distanceSquared < fleeRadiusSquared && distanceSquared != 0) {
-          const diffX = currentBoid.position.x - this.mousePosition.x;
-          const diffY = currentBoid.position.y - this.mousePosition.y;
-          const distance = Math.sqrt(distanceSquared);
-          fleePredatorsForce.x = diffX / distance;
-          fleePredatorsForce.y = diffY / distance;
+        if (distanceSquared < fleeRadiusSquared && distanceSquared != 0) {
+            const diffX = currentBoid.position.x - this.mousePosition.x;
+            const diffY = currentBoid.position.y - this.mousePosition.y;
+            const distance = Math.sqrt(distanceSquared);
+            fleePredatorsForce.x += diffX / distance;
+            fleePredatorsForce.y += diffY / distance;
+        }
       }
 
       return fleePredatorsForce;
   }
 
-  giveBirth ( parent:Boid ) {
-    let evolutionChances = 0;
-    parent.isPredator ? evolutionChances = this.predatorEvolutionChances/100 : evolutionChances = this.boidEvolutionChances/100;
-    let maxVelocity = parent.maxVelocity;
-    let reproductionRate = parent.reproductionRate;
-    let isEvolved = parent.isEvolved;
+  giveBirth ( parent: Boid, partner: Boid = parent ) {
+    // Crossover: each gene comes from one parent or the other, which keeps the diversity of the population
+    const genome: Genome = {
+      maxVelocity: (Math.random() < 0.5 ? parent : partner).genome.maxVelocity,
+      reproductionRate: (Math.random() < 0.5 ? parent : partner).genome.reproductionRate,
+    };
 
+    const evolutionChances = parent.isPredator ? this.predatorEvolutionChances/100 : this.boidEvolutionChances/100;
     if ( Math.random() <= evolutionChances ) {
-      let evolutionStep = this.boidEvolutionStep/100;
-      let evolutionCap = this.boidEvolutionCap/100;
-      let defaultMaxVelocity = this.boidMaxVelocity;
-      let defaultReproductionRate = this.boidReproductionRate;
-      if ( parent.isPredator ) {
-        evolutionStep = this.predatorEvolutionStep/100;
-        evolutionCap = this.predatorEvolutionCap/100;
-        defaultMaxVelocity = this.predatorMaxVelocity;
-        defaultReproductionRate = this.predatorReproductionRate;
-      }
-      isEvolved = true;
-      const evoli = Math.random() * 100;
-      if ( evoli <= 50 ) {
-        evoli%2==0 ?
-        maxVelocity = Math.min(defaultMaxVelocity * (1+evolutionCap), maxVelocity*(1+evolutionStep)) :
-        maxVelocity = Math.max(defaultMaxVelocity * (1-evolutionCap), maxVelocity*(1-evolutionStep));
-      } else {
-        evoli%2==0 ?
-        reproductionRate = Math.min(defaultReproductionRate * (1+evolutionCap), reproductionRate*(1+evolutionStep)) :
-        reproductionRate = Math.max(defaultReproductionRate * (1-evolutionCap), reproductionRate*(1-evolutionStep));
-      }
+      this.mutate(genome, parent.isPredator);
     }
-    
+
     this.insertNewBoid (
       { x: parent.position.x, y: parent.position.y },
       { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-      maxVelocity,
       parent.isPredator,
-      reproductionRate,
-      reproductionRate * 2,
-      parent.quadtree,
-      isEvolved
+      genome,
+      genome.reproductionRate * 2,
+      parent.quadtree
     );
   }
 
-  insertNewBoid ( position: Point, velocity: Point, maxVelocity: number, isPredator: boolean, reproductionRate: number,
-    reproductionCooldown: number, quadtree: Quadtree, isEvolved: boolean = false ) {
+  // Default genome of the species, slightly varied so that natural selection has something to work on from the start
+  createGenome ( isPredator: boolean ): Genome {
+    const variation = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
+    const vary = (value: number) => value * (1 + (Math.random() * 2 - 1) * variation);
+    return {
+      maxVelocity: vary(isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
+      reproductionRate: vary(isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
+    };
+  }
+
+  // Alter one random gene by one evolution step, for better or worse, within the evolution cap
+  mutate ( genome: Genome, isPredator: boolean ) {
+    const evolutionStep = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
+    const evolutionCap = (isPredator ? this.predatorEvolutionCap : this.boidEvolutionCap) / 100;
+    const gene: keyof Genome = Math.random() < 0.5 ? 'maxVelocity' : 'reproductionRate';
+    const defaultValue = gene === 'maxVelocity'
+      ? (isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity)
+      : (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
+    const mutated = genome[gene] * (Math.random() < 0.5 ? 1 + evolutionStep : 1 - evolutionStep);
+    genome[gene] = Math.min(defaultValue * (1 + evolutionCap), Math.max(defaultValue * (1 - evolutionCap), mutated));
+  }
+
+  // Normalized deviation of a gene from its species default, in [-1, 1], used to color the boid
+  geneTrait ( value: number, defaultValue: number ): number {
+    return Math.max(-1, Math.min(1, (value / defaultValue - 1) / this.traitScale));
+  }
+
+  insertNewBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
+    reproductionCooldown: number, quadtree: Quadtree ) {
     if ( this.errorFadeOut == 0 || this.pauseSimulation ) {
       if ( this.fps >= this.minFPS  ) {
-          
+
         const boid: Boid = {
           position: position,
           velocity: velocity,
-          maxVelocity: maxVelocity,
+          genome: genome,
+          speedTrait: this.geneTrait(genome.maxVelocity, isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
+          // a lower reproduction rate means a more fertile boid
+          fertilityTrait: -this.geneTrait(genome.reproductionRate, isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
           isPredator: isPredator,
-          isEvolved: isEvolved,
           isDead: false,
-          reproductionRate: reproductionRate,
           reproductionCooldown: reproductionCooldown,
           predationCounter: 0,
           alpha: 1,
@@ -696,34 +694,48 @@ export class MainComponent implements OnInit {
   tryToReproduce(boid: Boid) {
     const reproductionRadiusSquared = this.reproductionRadius**2;
     const reproductionPartners = this.boids.filter(otherBoid => {
+      if ( otherBoid === boid ) {
+        return false;
+      }
       const distanceSquared = this.calculateDistanceSquared(boid.position, otherBoid.position);
       return (
         distanceSquared < reproductionRadiusSquared &&
         this.areVelocitiesSimilar(boid.velocity, otherBoid.velocity) &&
-        otherBoid.predationCounter >= ( this.reproductionThreshold * (11 - this.boidReproductionModificator)/10 ) &&
-        otherBoid.reproductionCooldown === 0
+        this.isReadyToNest(otherBoid)
       );
     });
 
     if ( reproductionPartners && reproductionPartners.length > 0 ) {
-      
+
       const partner = reproductionPartners[Math.floor(Math.random() * reproductionPartners.length)];
 
       if ( Math.random() <= this.boidReproductionChances/100 ) {
-        this.giveBirth ( boid );
+        this.giveBirth ( boid, partner );
       }
 
-      boid.reproductionCooldown = partner.reproductionCooldown = this.boidReproductionRate * (11 - this.boidReproductionModificator)/10;
+      boid.reproductionCooldown = boid.genome.reproductionRate * (11 - this.boidReproductionModificator)/10;
+      partner.reproductionCooldown = partner.genome.reproductionRate * (11 - this.boidReproductionModificator)/10;
       boid.predationCounter = partner.predationCounter = 0; // Reset quiet time for both parents
 
     }
+  }
+
+  // A regular boid can nest after a quiet time and a cooldown, both shortened by its fertility gene
+  isReadyToNest(boid: Boid): boolean {
+    const fertilityRatio = boid.genome.reproductionRate / this.boidReproductionRate;
+    return boid.reproductionCooldown === 0 &&
+      boid.predationCounter >= this.reproductionThreshold * (11 - this.boidReproductionModificator)/10 * fertilityRatio;
   }
 
   areVelocitiesSimilar(velocity1: { x: number, y: number }, velocity2: { x: number, y: number }): boolean {
     const angleThreshold = 0.1;
     const dotProduct = velocity1.x * velocity2.x + velocity1.y * velocity2.y;
     const magnitudesProduct = Math.sqrt(velocity1.x ** 2 + velocity1.y ** 2) * Math.sqrt(velocity2.x ** 2 + velocity2.y ** 2);
-    const cosineSimilarity = dotProduct / magnitudesProduct;
+    if ( magnitudesProduct === 0 ) {
+      return false;
+    }
+    // Clamp to avoid NaN from floating point rounding
+    const cosineSimilarity = Math.max(-1, Math.min(1, dotProduct / magnitudesProduct));
     return Math.acos(cosineSimilarity) < angleThreshold;
   }
 

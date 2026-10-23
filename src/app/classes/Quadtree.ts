@@ -1,22 +1,4 @@
-interface Vec2 {
-  x: number;
-  y: number;
-}
-
-interface Boid {
-  position: { x: number, y: number };
-  velocity: { x: number, y: number };
-  maxVelocity: number;
-  isPredator: boolean;
-  isEvolved: boolean;
-  alpha: number;
-  isDead: boolean;
-  reproductionRate: number;
-  reproductionCooldown: number;
-  predationCounter: number;
-  quadtree: Quadtree;
-  preyLink : Boid | null;
-}
+import type { Boid, Point as Vec2 } from './Boid';
 
 export class Quadtree {
   x: number;
