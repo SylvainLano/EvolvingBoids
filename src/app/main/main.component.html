@@ -1,4 +1,4 @@
-<div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''">
+<div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''" [class.demo-cursor-hidden]="demo.active && !demo.showHint">
     <canvas #boidCanvas class="boid-canvas" [style.display]="renderer === 'canvas' ? 'block' : 'none'"></canvas>
     <ng-container *ngIf="renderer === 'dom'">
     <div class="boid-container">
@@ -26,12 +26,14 @@
         </div>
     </div>
     </ng-container>
-    <div class="messages-container">
+    <div class="messages-container" [class.demo-hidden]="demo.active">
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
     </div>
+    <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
+    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
-<div class="display-container">
+<div class="display-container" [class.demo-hidden]="demo.active">
 
     <div class="status-container">
         <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }}</p>
@@ -70,6 +72,10 @@
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
                     -> <a (click)="initializeSimulation()" id="restartSimulation">Restart Simulation</a>
+                </p>
+                <p [ngClass]="darkMode ? 'simulation-blue-dark' : 'simulation-blue-light'"
+                    title="A never ending screensaver, in fullscreen. Also with the D key, or the url index.html?demo">
+                    -> <a (click)="demo.start(true)" id="startDemo">Start Demo Mode (D)</a>
                 </p>
                 <div style="display:inline;">
                     Simulation Mode :

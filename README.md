@@ -8,6 +8,14 @@
 - The animation loop runs outside of Angular's zone, the counters are refreshed 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances  
+- The simulation adapts to the window size (resize, fullscreen) without restarting  
+
+### The Demo Mode
+- A never ending screensaver, started with the D key, the Simulation Options, or the url `index.html?demo`  
+- The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
+- Scenes (Shoal, Murmuration, Fireflies, Night Hunt) follow each other every 2.5 minutes, with a smooth transition of the parameters  
+- A director keeps the ecosystem alive: new flocks and predator packs arrive from the borders when a population is low, with the genes of the current population, and reproduction stops when a population is too large or the FPS too low  
+- Moving the mouse shows how to exit: D or Esc  
 
 ### The Quadtree
 - Regular Boids and Predators detection are handled by a Quadtree  

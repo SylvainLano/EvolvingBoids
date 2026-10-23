@@ -2,6 +2,7 @@ import { Component, OnInit, ElementRef, NgZone, ChangeDetectorRef, ViewChild } f
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Genome, Point } from '../classes/Boid';
 import { CanvasRenderer } from '../classes/CanvasRenderer';
+import { DemoMode } from '../classes/DemoMode';
 
 @Component({
   selector: 'app-main',
@@ -126,6 +127,8 @@ export class MainComponent implements OnInit {
   uiRefreshInterval = 200;                      // delay in ms between two refreshes of the counters and messages
   private lastUiRefresh = 0;
   private canvasRenderer!: CanvasRenderer;
+  private resizeTimeout?: ReturnType<typeof setTimeout>;
+  demo = new DemoMode(this);
   @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
 
   constructor(private el: ElementRef, private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
@@ -141,10 +144,33 @@ export class MainComponent implements OnInit {
       document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
       document.addEventListener('click', (event) => this.handleMouseClick(event));
       document.documentElement.addEventListener('mouseleave', () => this.mousePosition = null);
+      document.addEventListener('keydown', (event) => this.handleKeyDown(event));
+      document.addEventListener('visibilitychange', () => this.demo.onVisibilityChange());
+      document.addEventListener('fullscreenchange', () => this.demo.onFullscreenChange());
+      window.addEventListener('resize', () => {
+        clearTimeout(this.resizeTimeout);
+        this.resizeTimeout = setTimeout(() => this.resizeSimulation(), 200);
+      });
+
+      // The demo can be started directly with an url like index.html?demo
+      if (new URLSearchParams(window.location.search).has('demo')) {
+        this.demo.start(false);
+      }
 
       // Start the animation loop
       this.updateBoids(performance.now());
     });
+  }
+
+  handleKeyDown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    if (event.key === 'd' || event.key === 'D') {
+      this.demo.toggle();
+    } else if (event.key === 'Escape') {
+      this.demo.stop();
+    }
   }
 
   restartSimulation(): void {
@@ -187,6 +213,33 @@ export class MainComponent implements OnInit {
     }
   }
   
+  // Fit the simulation to a new window size (resize, fullscreen) without restarting it
+  resizeSimulation() {
+    const container = this.el.nativeElement.querySelector('.main-container');
+    const width = container.offsetWidth;
+    const height = container.offsetHeight;
+    if ( width === 0 || height === 0 || ( width === this.containerWidth && height === this.containerHeight ) ) {
+      return;
+    }
+    // Positions are scaled to the new size, so the boids keep their layout and none is left outside
+    const scaleX = width / this.containerWidth;
+    const scaleY = height / this.containerHeight;
+    const scale = (point: Point): Point => ({
+      x: Math.min(width - 1, Math.max(0, point.x * scaleX)),
+      y: Math.min(height - 1, Math.max(0, point.y * scaleY)),
+    });
+    this.containerWidth = width;
+    this.containerHeight = height;
+    this.quadtree = new Quadtree( 0, 0, width, height, 24 );
+
+    for (const boid of [...this.boids, ...this.predators]) {
+      boid.position = scale(boid.position);
+      boid.trail = boid.trail.map(scale);
+      this.quadtree.insert(boid);
+    }
+    this.finalQuadtreeList = this.quadtree.retrieveFinalQuadtrees();
+  }
+
   handleFormClick(event: MouseEvent) {
     event.stopPropagation(); // Prevent the event from propagating down
   }
@@ -219,11 +272,20 @@ export class MainComponent implements OnInit {
 
   // Handle mouse movement
   handleMouseMove(event: MouseEvent) {
+    // In demo mode, the mouse only reveals how to exit
+    if ( this.demo.active ) {
+      this.demo.onMouseMove();
+      return;
+    }
     // Update the mouse position based on the event
     this.mousePosition = { x: event.clientX, y: event.clientY };
   }
 
   handleMouseClick(event: MouseEvent) {
+    if ( this.demo.active ) {
+      this.demo.onMouseMove();
+      return;
+    }
     const isPredator = this.addOnClick == "predator";
     // Create a new boid at the mouse click position
     this.insertNewBoid (
@@ -238,6 +300,8 @@ export class MainComponent implements OnInit {
 
   // Animation loop: the simulation advances by fixed steps, so its speed doesn't depend on the screen refresh rate
   updateBoids(timestamp: number) {
+    this.demo.update(timestamp);
+
     // Long gaps (hidden tab, very slow frame) are not caught up, to avoid a burst of steps
     this.stepAccumulator += Math.max(0, Math.min(timestamp - this.lastStepTime, this.stepDuration * this.maxStepsPerFrame));
     this.lastStepTime = timestamp;

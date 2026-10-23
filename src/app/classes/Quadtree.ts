@@ -1,6 +1,10 @@
 import type { Boid, Point as Vec2 } from './Boid';
 
 export class Quadtree {
+  // Past this depth, a Quadtree holds more entities than its capacity instead of splitting again:
+  // entities at the very same position could never be separated, and would split it endlessly
+  static readonly maxDepth = 10;
+
   x: number;
   y: number;
   width: number;
@@ -29,7 +33,7 @@ export class Quadtree {
   insert(entity: Boid) {
     if ( !this.isInsideBounds( { x: entity.position.x, y: entity.position.y} ) && this.parent !== null ){
       this.parent!.insert(entity);
-    } else if ( !this.subdivided && this.entities.length < this.capacity ) {
+    } else if ( !this.subdivided && ( this.entities.length < this.capacity || this.depth >= Quadtree.maxDepth ) ) {
       entity.quadtree = this;
       this.entities.push(entity);
     } else {

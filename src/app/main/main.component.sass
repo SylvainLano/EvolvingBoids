@@ -70,6 +70,38 @@
 
 
 
+.demo-hidden
+  display: none
+
+.demo-cursor-hidden
+  cursor: none
+
+.demo-title, .demo-hint
+  position: absolute
+  z-index: 10
+  color: white
+  font-family: Monaco, monospace
+  user-select: none
+  pointer-events: none
+  opacity: 0
+  transition: opacity 2s ease
+
+.demo-title
+  bottom: 40px
+  left: 50px
+  font-size: 32px
+  letter-spacing: 6px
+  text-transform: uppercase
+
+.demo-hint
+  top: 20px
+  right: 30px
+  font-size: 13px
+  transition-duration: 0.5s
+
+.demo-visible
+  opacity: 0.6
+
 .display-container
   position: relative
   top: 10px
