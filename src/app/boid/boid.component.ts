@@ -1,5 +1,6 @@
 // boid.component.ts
 import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { boidColor } from '../classes/BoidColor';
 
 @Component({
   selector: 'app-boid',
@@ -34,26 +35,9 @@ export class BoidComponent implements OnChanges {
     );
   }
 
-  // The color is derived from the genes:
-  // - speed shifts the hue (boids: violet <- blue -> cyan, predators: orange <- red -> magenta)
-  // - fertility shifts the lightness (more fertile is brighter)
-  // - a digesting predator loses its saturation
   private calculateColor(): void {
-    if (this.isDead) {
-      this.colorStyle = {
-        'color': this.darkMode ? `rgba(255, 255, 255, ${this.alpha})` : `rgba(0, 0, 0, ${this.alpha})`
-      };
-      return;
-    }
-
-    const hue = this.isPredator
-      ? (360 - 40 * this.speedTrait) % 360
-      : 240 - 50 * this.speedTrait;
-    const saturation = this.isPredator ? 100 * this.alpha : 100;
-    const lightness = (this.darkMode ? (this.isPredator ? 72 : 70) : 45) + 12 * this.fertilityTrait;
-
     this.colorStyle = {
-      'color': `hsl(${hue}, ${saturation}%, ${lightness}%)`
+      'color': boidColor(this.isPredator, this.isDead, this.speedTrait, this.fertilityTrait, this.alpha, this.darkMode)
     };
   }
 

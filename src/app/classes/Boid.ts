@@ -25,4 +25,5 @@ export interface Boid {
   predationCounter: number; // predationCounter is time without predation for boids, and time without predating for predators
   quadtree: Quadtree;
   preyLink : Boid | null;   // for Regular Boids, the Predator that chase them, for Predators, the prey !
+  trail: Point[];           // last positions, oldest first, drawn as a trail by the canvas renderer
 }

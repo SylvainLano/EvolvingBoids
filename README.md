@@ -3,6 +3,12 @@
 ## Description
 [Evolving Boids](https://sylvainlano.github.io/EvolvingBoids/index.html) is an Angular Boids simulation using SASS and Quadtree
 
+### The Rendering
+- The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
+- The animation loop runs outside of Angular's zone, the counters are refreshed 5 times per second  
+- Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
+- The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances  
+
 ### The Quadtree
 - Regular Boids and Predators detection are handled by a Quadtree  
 - Boids are not inserted when FPS gets under 20  
@@ -30,7 +36,6 @@
 
 ### Todos
 - Add different skins (or letters) for boid
-- Create a Canvas version to allow users to compare performances
 - Add more evolutions 
 
 ### Futures developments and ideas

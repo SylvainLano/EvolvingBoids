@@ -1,6 +1,7 @@
-import { Component, OnInit, ElementRef } from '@angular/core';
+import { Component, OnInit, ElementRef, NgZone, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Genome, Point } from '../classes/Boid';
+import { CanvasRenderer } from '../classes/CanvasRenderer';
 
 @Component({
   selector: 'app-main',
@@ -118,18 +119,32 @@ export class MainComponent implements OnInit {
   rangeQueryCap = 6;                            // number of neighboring boids each individual relies onto
   traitScale = 0.5;                             // gene deviation from the species default that gives the most extreme color
   finalQuadtreeList: Quadtree[] = [this.quadtree];
-  constructor(private el: ElementRef) {}
+
+  renderer: 'canvas' | 'dom' = 'canvas';        // the DOM renderer is kept to compare performances
+  trailLength = 8;                            // number of past positions drawn behind each boid by the canvas renderer
+  glow = true;                                  // additive blending and halos with the canvas renderer, in dark mode
+  uiRefreshInterval = 200;                      // delay in ms between two refreshes of the counters and messages
+  private lastUiRefresh = 0;
+  private canvasRenderer!: CanvasRenderer;
+  @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
+
+  constructor(private el: ElementRef, private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
-    // Listeners are registered once, not at each restart
-    document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
-    document.addEventListener('click', (event) => this.handleMouseClick(event));
-    document.documentElement.addEventListener('mouseleave', () => this.mousePosition = null);
-
+    this.canvasRenderer = new CanvasRenderer(this.boidCanvas.nativeElement);
     this.initializeSimulation();
-    
-    // Start the animation loop
-    this.updateBoids(performance.now());
+
+    // The animation loop and the mouse listeners run outside of Angular, so they don't trigger a change detection
+    // of the whole application at each frame or mouse move: the view is refreshed on demand in render()
+    this.ngZone.runOutsideAngular(() => {
+      // Listeners are registered once, not at each restart
+      document.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+      document.addEventListener('click', (event) => this.handleMouseClick(event));
+      document.documentElement.addEventListener('mouseleave', () => this.mousePosition = null);
+
+      // Start the animation loop
+      this.updateBoids(performance.now());
+    });
   }
 
   restartSimulation(): void {
@@ -139,7 +154,7 @@ export class MainComponent implements OnInit {
   initializeSimulation() {
 
     // Get the dimensions of the boid container
-    const boidContainer = this.el.nativeElement.querySelector('.boid-container');
+    const boidContainer = this.el.nativeElement.querySelector('.main-container');
     this.containerWidth = boidContainer.offsetWidth;
     this.containerHeight = boidContainer.offsetHeight;
     this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 24 );
@@ -235,8 +250,26 @@ export class MainComponent implements OnInit {
     // Update FPS
     this.updateFPS(timestamp);
 
+    this.render(timestamp);
+
     // Call requestAnimationFrame to update the next frame
     requestAnimationFrame((nextTimestamp) => this.updateBoids(nextTimestamp));
+  }
+
+  render(timestamp: number) {
+    if (this.renderer === 'canvas') {
+      this.canvasRenderer.render(
+        [this.boids, this.predators],
+        this.drawQuadtree ? this.finalQuadtreeList : null,
+        { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount }
+      );
+    }
+
+    // The view is refreshed at each frame for the DOM renderer, and only a few times per second for the counters otherwise
+    if (this.renderer === 'dom' || timestamp - this.lastUiRefresh >= this.uiRefreshInterval) {
+      this.lastUiRefresh = timestamp;
+      this.cdr.detectChanges();
+    }
   }
 
   stepSimulation() {
@@ -472,6 +505,16 @@ export class MainComponent implements OnInit {
       // Update the boid's position
       boid.quadtree.move( boid, newPosition );
 
+      // Remember the position for the trail - move() gives the boid a new position object, so it can be kept as is
+      if ( this.trailLength > 0 ) {
+        boid.trail.push(boid.position);
+        if ( boid.trail.length > this.trailLength ) {
+          boid.trail.splice(0, boid.trail.length - this.trailLength);
+        }
+      } else if ( boid.trail.length > 0 ) {
+        boid.trail = [];
+      }
+
     }
   }
   }
@@ -651,7 +694,8 @@ export class MainComponent implements OnInit {
           predationCounter: 0,
           alpha: 1,
           quadtree: quadtree,
-          preyLink: null
+          preyLink: null,
+          trail: []
         };
         
         // Insert boid into Quadtree

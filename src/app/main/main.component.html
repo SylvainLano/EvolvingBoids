@@ -1,4 +1,6 @@
 <div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''">
+    <canvas #boidCanvas class="boid-canvas" [style.display]="renderer === 'canvas' ? 'block' : 'none'"></canvas>
+    <ng-container *ngIf="renderer === 'dom'">
     <div class="boid-container">
         <app-boid *ngFor="let boid of boids.concat(predators)"
             [position]="boid.position"
@@ -23,6 +25,7 @@
             <div class="boid-count" *ngIf="displayQuadtreeCount">{{ quadtree.entities.length }}</div>
         </div>
     </div>
+    </ng-container>
     <div class="messages-container">
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
     </div>
@@ -116,8 +119,21 @@
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="displayOptionsVisible" id="hiddenDisplayOptions">
                 <p class="display-options">
+                    Renderer :
+                    <label title="Draw the boids on a canvas, with trails and glow.">
+                        <input type="radio" [(ngModel)]="renderer" value="canvas" name="renderer"> Canvas
+                    </label>
+                    <label title="Draw each boid as an HTML element, to compare performances.">
+                        <input type="radio" [(ngModel)]="renderer" value="dom" name="renderer"> DOM
+                    </label>
+                </p>
+                <p class="display-options">
                     Dark Mode :
                     <input type="checkbox" [(ngModel)]="darkMode" name="darkMode">
+                </p>
+                <p class="display-options" title="Additive blending and halos, with the Canvas renderer in Dark Mode.">
+                    Glow :
+                    <input type="checkbox" [(ngModel)]="glow" name="glow">
                 </p>
                 <p class="display-options">
                     Draw Quadtrees :
@@ -134,6 +150,13 @@
                 <p class="display-options">
                     Display FPS count :
                     <input type="checkbox" [(ngModel)]="displayFPSCount" name="displayFPSCount">
+                </p>
+                <p class="slider-p" title="With the Canvas renderer.">
+                    Trails length :
+                    <mat-slider [(ngModel)]="trailLength" min="0" max="20" step="2" showTickMarks discrete
+                    name="trailLength" ngDefaultControl>
+                    <input matSliderThumb [value]="trailLength">
+                    </mat-slider>
                 </p>
             </div>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="boidOptionsVisible" id="hiddenBoidOptions">
