@@ -17,6 +17,7 @@ export interface RenderOptions {
 
 // What the user drew with the mouse tools
 export interface WorldDrawing {
+  food: { texture: HTMLCanvasElement, width: number, height: number } | null;   // one pixel per cell, scaled up
   obstacles: Point[][];
   currents: Point[][];
   currentWidth: number;                                                     // width of the band carrying the boids
@@ -70,6 +71,13 @@ export class CanvasRenderer {
 
     if (quadtrees !== null) {
       this.drawQuadtrees(quadtrees, options);
+    }
+
+    // The plankton is a smooth glowing mist, scaled up from one pixel per cell
+    if (world.food !== null) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(world.food.texture, 0, 0, world.food.width, world.food.height);
     }
 
     // The currents flow under the boids, the obstacles stand among them

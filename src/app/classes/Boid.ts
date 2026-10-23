@@ -30,7 +30,8 @@ export interface Boid {
   isMutant: boolean;        // born with a mutation, on top of the small variation of every birth
   age: number;              // in simulation steps, for regular boids and Super Predators
   lifespanFactor: number;   // random factor applied to the lifespan of regular boids, so they don't all die at the same age
-  geneCost: number;         // lifespan (boids) or starvation resistance (predators) multiplier, lowered by speed and fertility
+  energy: number;           // regular boids only, from 0 to 1: they eat plankton to gain it, and spend it to swim and reproduce
+  geneCost: number;        // lifespan (boids) or starvation resistance (predators) multiplier, lowered by speed and fertility
   alpha: number;
   isDead: boolean;
   reproductionCooldown: number;

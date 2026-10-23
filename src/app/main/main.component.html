@@ -1,5 +1,5 @@
 <div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''" [class.demo-cursor-hidden]="demo.active && !demo.showHint"
-    [class.tool-drawing]="!demo.active && (tool === 'obstacle' || tool === 'current' || tool === 'eraser')">
+    [class.tool-drawing]="!demo.active && (tool === 'obstacle' || tool === 'current' || tool === 'eraser' || tool === 'food')">
     <canvas #boidCanvas class="boid-canvas" [style.display]="renderer === 'canvas' ? 'block' : 'none'"></canvas>
     <ng-container *ngIf="renderer === 'dom'">
     <div class="boid-container">
@@ -38,6 +38,7 @@
         <div>Speed : {{ inspection.speed }}</div>
         <div>Fertility : {{ inspection.fertility }}</div>
         <div>{{ inspection.lifeLabel }} : {{ inspection.life }}</div>
+        <div *ngIf="inspection.energy !== null">Energy : {{ inspection.energy }}</div>
     </div>
     <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
@@ -230,6 +231,11 @@
                     name="boidLifespan" ngDefaultControl>
                     <input matSliderThumb [value]="boidLifespan">
                     </mat-slider>
+                </p>
+                <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
+                    title="Boids eat plankton, growing in drifting fertile areas: they need energy to reproduce, and starve without it.">
+                    Plankton (boids need food) :
+                    <input type="checkbox" [(ngModel)]="foodEnabled" name="foodEnabled">
                 </p>
                 <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Fleeing a Predator resets nesting time :

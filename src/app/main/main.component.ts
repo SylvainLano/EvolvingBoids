@@ -3,13 +3,14 @@ import { Quadtree } from '../classes/Quadtree';
 import { Boid, Genome, Heritage, Point } from '../classes/Boid';
 import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
 import { SegmentField } from '../classes/SegmentField';
+import { FoodField } from '../classes/FoodField';
 import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
 import { Statistics } from '../classes/Statistics';
 import { ChartRenderer } from '../classes/ChartRenderer';
 
 // What a click or a drag with the mouse does
-type Tool = 'boid' | 'predator' | 'superPredator' | 'obstacle' | 'current' | 'eraser';
+type Tool = 'boid' | 'predator' | 'superPredator' | 'obstacle' | 'current' | 'eraser' | 'food';
 
 // Content and position of the card describing the inspected boid
 interface Inspection {
@@ -21,6 +22,7 @@ interface Inspection {
   fertility: string;
   lifeLabel: string;
   life: string;
+  energy: string | null;      // regular boids, with plankton
 }
 
 @Component({
@@ -36,7 +38,15 @@ export class MainComponent implements OnInit {
   reproductionThreshold = 600;        // needed quiet time to nest - can be modified by the input boidReproductionModificator
   boidLifespan = 180;                 // average lifespan in seconds (+/- 20 %), 0 for immortal boids - can be modified by the user
   partnerAngleThreshold = 0.3;        // maximum angle in radians between the directions of two partners
-  infiniteMinBoids = 30;              // in Infinite mode, reinforcements arrive when there are fewer boids than this, enough for them to find partners
+  foodEnabled = true;                 // boids eat plankton: they need energy to reproduce, and starve without it - can be modified by the user
+  foodUpdateInterval = 6;             // simulation steps between two growths of the plankton
+  boidBaseMetabolism = 0.0001;        // energy spent per step, even at rest
+  boidSwimCost = 0.0002;              // energy spent per step swimming at the default boid speed, it grows with the square of the speed
+  eatQuantity = 0.005;                // maximum food eaten per step: boids graze for a while to fill up
+  reproductionEnergy = 0.8;           // energy needed to nest: after a birth, a boid has to eat before nesting again
+  birthEnergyCost = 0.3;              // energy spent by each parent at a birth, the child starts with both
+  foodAttraction = 1.5;               // importance of looking for food when hungry, regarding other directional factors
+  infiniteMinBoids = 30;             // in Infinite mode, reinforcements arrive when there are fewer boids than this, enough for them to find partners
   areaPerBoid = 4000;                // screen area in px² per boid when the screen is full, boids stop reproducing at this density
   geneCostFactor = 1.5;               // each +10 % of speed or fertility costs 15 % of lifespan (boids) or starvation resistance (predators)
   minGeneCost = 0.2;                  // the gene cost never shortens a life below 20 %
@@ -94,8 +104,11 @@ export class MainComponent implements OnInit {
     { id: 'superPredator', label: 'Super Predator', title: 'Click to add a super predator: it hunts boids and predators for 45 seconds' },
     { id: 'obstacle', label: 'Obstacle', title: 'Drag to draw a wall the boids can\'t cross' },
     { id: 'current', label: 'Current', title: 'Drag to draw a current carrying the boids along' },
-    { id: 'eraser', label: 'Eraser', title: 'Hold and move to remove boids, obstacles and currents' },
+    { id: 'eraser', label: 'Eraser', title: 'Hold and move to remove boids, obstacles, currents and plankton' },
+    { id: 'food', label: 'Food', title: 'Hold and move to sow plankton, it fades away out of the fertile areas' },
   ];
+  sowRadius = 40;
+  sowQuantity = 0.05;                 // food added per frame at the center of the sowing area
   obstacleAvoidRadius = 35;           // distance at which boids start to steer away from an obstacle, beyond the distance they need to turn
   obstacleAvoidanceForce = 3;         // importance of avoiding obstacles regarding other directional factors
   obstacles = new SegmentField(this.obstacleAvoidRadius + 5);   // the reach includes the move of a step, to detect the crossings
@@ -191,6 +204,8 @@ export class MainComponent implements OnInit {
   readonly timeScales = [1, 2, 4, 8];
   displayCharts = true;                         // live charts of the populations and of the average genes
   stats = new Statistics();
+  food!: FoodField;
+  private stepsSinceFoodUpdate = 0;
   genePoolSize = 30;                            // number of dead individuals whose genes are remembered, per species
   private boidGenePool: Heritage[] = [];
   private predatorGenePool: Heritage[] = [];
@@ -274,6 +289,8 @@ export class MainComponent implements OnInit {
     this.containerHeight = boidContainer.offsetHeight;
     this.quadtree = new Quadtree( 0, 0, this.containerWidth, this.containerHeight, 24 );
     this.finalQuadtreeList = [this.quadtree];
+    this.food = new FoodField( this.containerWidth, this.containerHeight );
+    this.stepsSinceFoodUpdate = 0;
     this.stats.clear();
     this.boidGenePool = [];
     this.predatorGenePool = [];
@@ -293,9 +310,10 @@ export class MainComponent implements OnInit {
       );
     }
 
-    // The first boids have random ages, so they don't all die of old age at the same time
+    // The first boids have random ages and energies, so they don't all die or nest at the same time
     for (const boid of this.boids) {
       boid.age = Math.random() * this.boidLifespan * (1000 / this.stepDuration) * 0.8;
+      boid.energy = 0.5 + Math.random() * 0.4;
     }
 
     // Initialize predators with random positions, velocities, and reproduction rate
@@ -337,6 +355,7 @@ export class MainComponent implements OnInit {
     }
     this.obstacles.transform(scale);
     this.currents.transform(scale);
+    this.food.resize(width, height);
     this.finalQuadtreeList = this.quadtree.retrieveFinalQuadtrees();
   }
 
@@ -417,6 +436,8 @@ export class MainComponent implements OnInit {
       this.stroke = { kind: this.tool, points: [point] };
     } else if ( this.tool === 'eraser' ) {
       this.erase(point);
+    } else if ( this.tool === 'food' ) {
+      this.food.sow(point, this.sowRadius, this.sowQuantity);
     }
   }
 
@@ -447,6 +468,7 @@ export class MainComponent implements OnInit {
     }
     this.obstacles.erase(center, this.eraserRadius);
     this.currents.erase(center, this.eraserRadius);
+    this.food.erase(center, this.eraserRadius);
   }
 
   clearDrawings() {
@@ -505,7 +527,7 @@ export class MainComponent implements OnInit {
 
     // The card stays inside the window
     const cardWidth = 230;
-    const cardHeight = 90;
+    const cardHeight = 110;
     this.inspection = {
       x: pointer.x + 16 + cardWidth > this.containerWidth ? pointer.x - 16 - cardWidth : pointer.x + 16,
       y: pointer.y + 16 + cardHeight > this.containerHeight ? pointer.y - 16 - cardHeight : pointer.y + 16,
@@ -519,6 +541,7 @@ export class MainComponent implements OnInit {
         : percent(1 - boid.genome.reproductionRate / (boid.isPredator ? this.predatorReproductionRate : this.boidReproductionRate)),
       lifeLabel,
       life,
+      energy: this.foodEnabled && !boid.isPredator ? `${Math.round(boid.energy * 100)} %` : null,
     };
   }
 
@@ -566,9 +589,13 @@ export class MainComponent implements OnInit {
   updateBoids(timestamp: number) {
     this.demo.update(timestamp);
 
-    // The eraser keeps erasing while the mouse is held, even without moving
-    if ( this.mousePressed && this.tool === 'eraser' && this.pointerPosition !== null && !this.demo.active ) {
-      this.erase(this.pointerPosition);
+    // The eraser keeps erasing, and the food keeps being sown, while the mouse is held, even without moving
+    if ( this.mousePressed && this.pointerPosition !== null && !this.demo.active ) {
+      if ( this.tool === 'eraser' ) {
+        this.erase(this.pointerPosition);
+      } else if ( this.tool === 'food' ) {
+        this.food.sow(this.pointerPosition, this.sowRadius, this.sowQuantity);
+      }
     }
 
     // The time scale runs more steps per frame to speed up the simulation
@@ -604,6 +631,9 @@ export class MainComponent implements OnInit {
         this.mutantHalos,
         this.inspectedBoid,
         {
+          food: this.foodEnabled
+            ? { texture: this.food.texture(this.darkMode), width: this.food.cols * this.food.cellSize, height: this.food.rows * this.food.cellSize }
+            : null,
           obstacles: this.obstacles.polylines,
           currents: this.currents.polylines,
           currentWidth: this.currentRadius * 2,
@@ -643,13 +673,20 @@ export class MainComponent implements OnInit {
     // Super Predators are a tool of the user, they don't count as predators
     this.totalPredators = this.predators.filter(predator => !predator.isSuper).length;
 
+    // The plankton grows every few steps, it is enough for its slow pace
+    if ( this.foodEnabled && ++this.stepsSinceFoodUpdate >= this.foodUpdateInterval ) {
+      this.food.update(this.stepsSinceFoodUpdate);
+      this.stepsSinceFoodUpdate = 0;
+    }
+
     this.dealWithDepletion();
 
     this.stats.step(
       this.boids,
       this.predators,
       { maxVelocity: this.boidMaxVelocity, reproductionRate: this.boidReproductionRate },
-      { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate }
+      { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
+      () => this.foodEnabled ? this.food.fillRatio() : NaN
     );
 
     const allBoids = [...this.boids, ...this.predators];
@@ -740,8 +777,18 @@ export class MainComponent implements OnInit {
         // Steer away from the obstacles drawn with the mouse
         const avoidObstacles = this.avoidObstacles(boid);
 
-        let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor + avoidObstacles.x * this.obstacleAvoidanceForce);
-        let velocityChangeY = (separation.y + alignment.y + cohesion.y + avoidBorders.y + fleePredators.y * this.fleeFactor + avoidObstacles.y * this.obstacleAvoidanceForce);
+        // Eat the plankton where the boid is, and look for more when hungry
+        const seekFood = { x: 0, y: 0 };
+        if ( this.foodEnabled ) {
+          boid.energy += this.food.eat(boid.position, Math.min(this.eatQuantity, 1 - boid.energy));
+          const hunger = 1 - boid.energy;
+          const gradient = this.food.gradient(boid.position);
+          seekFood.x = gradient.x * hunger * this.foodAttraction;
+          seekFood.y = gradient.y * hunger * this.foodAttraction;
+        }
+
+        let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor + avoidObstacles.x * this.obstacleAvoidanceForce + seekFood.x);
+        let velocityChangeY = (separation.y + alignment.y + cohesion.y + avoidBorders.y + fleePredators.y * this.fleeFactor + avoidObstacles.y * this.obstacleAvoidanceForce + seekFood.y);
 
         // Limit the maximum steering force
         const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
@@ -767,6 +814,17 @@ export class MainComponent implements OnInit {
           const ratio = boid.genome.maxVelocity / Math.sqrt(speedSquared);
           boid.velocity.x *= ratio;
           boid.velocity.y *= ratio;
+        }
+
+        // Living and swimming cost energy, swimming fast costs much more: a boid without energy starves to death
+        if ( this.foodEnabled ) {
+          const relativeSpeedSquared = Math.min(speedSquared, boid.genome.maxVelocity ** 2) / this.boidMaxVelocity ** 2;
+          boid.energy -= this.boidBaseMetabolism + this.boidSwimCost * relativeSpeedSquared;
+          if ( boid.energy <= 0 ) {
+            boid.energy = 0;
+            boid.isDead = true;
+            this.rememberGenes(boid);
+          }
         }
 
       } else if ( boid.isSuper ) {
@@ -1206,7 +1264,7 @@ export class MainComponent implements OnInit {
       return fleePredatorsForce;
   }
 
-  giveBirth ( parent: Boid, partner: Boid = parent ) {
+  giveBirth ( parent: Boid, partner: Boid = parent ): Boid | null {
     // Crossover: each gene comes from one parent or the other, which keeps the diversity of the population
     const genome: Genome = {
       maxVelocity: (Math.random() < 0.5 ? parent : partner).genome.maxVelocity,
@@ -1237,6 +1295,7 @@ export class MainComponent implements OnInit {
     if ( isMutant && child !== null ) {
       this.mutantHalos.push({ boid: child, start: performance.now() });
     }
+    return child;
   }
 
   // Remember the genes of the last dead individuals, so the reinforcements of an extinct species can inherit them
@@ -1329,6 +1388,7 @@ export class MainComponent implements OnInit {
           age: 0,
           lifespanFactor: 0.8 + Math.random() * 0.4,
           geneCost: this.calculateGeneCost(genome, isPredator),
+          energy: 0.8,
           isDead: false,
           reproductionCooldown: reproductionCooldown,
           predationCounter: 0,
@@ -1400,7 +1460,13 @@ export class MainComponent implements OnInit {
       const carryingCapacity = this.containerWidth * this.containerHeight / this.areaPerBoid;
       const crowding = Math.max(0, 1 - this.boids.length / carryingCapacity);
       if ( Math.random() <= this.boidReproductionChances/100 * crowding ) {
-        this.giveBirth ( boid, partner );
+        const child = this.giveBirth ( boid, partner );
+        // A birth costs energy to both parents, the child starts with it
+        if ( child !== null && this.foodEnabled ) {
+          boid.energy -= this.birthEnergyCost;
+          partner.energy -= this.birthEnergyCost;
+          child.energy = 2 * this.birthEnergyCost;
+        }
       }
 
       boid.reproductionCooldown = boid.genome.reproductionRate * (11 - this.boidReproductionModificator)/10;
@@ -1414,6 +1480,7 @@ export class MainComponent implements OnInit {
   isReadyToNest(boid: Boid): boolean {
     const fertilityRatio = boid.genome.reproductionRate / this.boidReproductionRate;
     return boid.reproductionCooldown === 0 &&
+      ( !this.foodEnabled || boid.energy >= this.reproductionEnergy ) &&
       boid.predationCounter >= this.reproductionThreshold * (11 - this.boidReproductionModificator)/10 * fertilityRatio;
   }
 

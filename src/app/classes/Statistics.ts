@@ -9,6 +9,7 @@ export interface StatsSample {
   predatorSpeed: number;
   boidFertility: number;
   predatorFertility: number;
+  food: number;                 // plankton compared to what the fertile areas can hold, in percent, NaN without plankton
 }
 
 export interface SpeciesDefaults {
@@ -32,7 +33,8 @@ export class Statistics {
   }
 
   // Called at each simulation step, records a sample at regular intervals
-  step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults) {
+  // The food ratio is only computed when a sample is recorded
+  step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults, foodRatio: () => number) {
     if (++this.stepsSinceSample < this.sampleInterval && this.samples.length > 0) {
       return;
     }
@@ -50,6 +52,7 @@ export class Statistics {
       predatorSpeed: predatorGenes.speed,
       boidFertility: boidGenes.fertility,
       predatorFertility: predatorGenes.fertility,
+      food: foodRatio() * 100,
     });
     if (this.samples.length > this.maxSamples) {
       this.samples.shift();

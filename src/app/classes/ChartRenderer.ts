@@ -46,6 +46,7 @@ export class ChartRenderer {
 
     const boidColor = darkMode ? '#8c8cff' : 'blue';
     const predatorColor = darkMode ? '#ff9b96' : 'red';
+    const foodColor = darkMode ? '#2dd4bf' : '#22a05a';
     const textColor = darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
     const gridColor = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)';
 
@@ -57,6 +58,7 @@ export class ChartRenderer {
         series: [
           { label: 'Boids', values: samples.map(s => s.boids), color: boidColor, unit: '' },
           { label: 'Predators', values: samples.map(s => s.predators), color: predatorColor, unit: '' },
+          { label: 'Food', values: samples.map(s => s.food), color: foodColor, unit: '%' },
         ],
       },
       {
@@ -90,6 +92,8 @@ export class ChartRenderer {
     const plotWidth = this.width - this.padding * 2;
     const plotTop = top + this.titleHeight;
     const plotHeight = height - this.titleHeight;
+    // A series without any value (the food without plankton) is not drawn at all
+    series = series.filter(s => s.values.length === 0 || s.values.some(Number.isFinite));
 
     // Title, then the latest value of each series on the right
     ctx.font = '10px Monaco, monospace';
