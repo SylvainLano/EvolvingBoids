@@ -271,7 +271,8 @@ export class Quadtree {
     return cornerDistanceSq <= Math.pow(radius, 2);
   }
 
-  findClosestRegularBoid(predator: Boid, unmarked: boolean): Boid | null {
+  // The closest regular boid a predator could chase, among those accepted by the filter
+  findClosestRegularBoid(predator: Boid, unmarked: boolean, accept: (boid: Boid) => boolean = () => true): Boid | null {
     const x = predator.position.x;
     const y = predator.position.y;
     let factor = 1;
@@ -291,7 +292,7 @@ export class Quadtree {
         checked.add( currentRegion );
 
         // Filter out predators, and boids dying of old age
-        const regularBoids = currentRegion.entities.filter((boid) => !boid.isPredator && !boid.isDead);
+        const regularBoids = currentRegion.entities.filter((boid) => !boid.isPredator && !boid.isDead && accept(boid));
       
         if (regularBoids.length > 0) {
           // If there are regular boids in the current region, return the closest one

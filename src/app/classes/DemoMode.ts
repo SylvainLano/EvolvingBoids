@@ -86,6 +86,8 @@ export class DemoMode {
     if (this.active) {
       return;
     }
+    // The demo drives the simulation on its own: a running challenge is left
+    this.app.challenges.close();
     this.active = true;
     this.savedView = Object.fromEntries(SAVED_VIEW.map(key => [key, this.app[key]])) as SavedView;
     this.savedSimulation = Object.fromEntries(SAVED_SIMULATION.map(key => [key, this.sim[key]])) as SavedSimulation;

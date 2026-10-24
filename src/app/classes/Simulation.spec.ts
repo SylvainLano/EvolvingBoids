@@ -33,6 +33,14 @@ describe('Simulation', () => {
     }
   });
 
+  it('should create the initial population even when the FPS is too low, but not the boids added later', () => {
+    const sim = new Simulation();
+    sim.fps = 5;
+    sim.initialize(800, 600);
+    expect(sim.boids.length).toBe(sim.numberOfBoids);
+    expect(sim.insertNewBoid({ x: 10, y: 10 }, { x: 0, y: 0 }, false, sim.createGenome(false), 0)).toBeNull();
+  });
+
   it('should keep every boid finite, inside the screen and in the Quadtree', () => {
     const sim = new Simulation();
     sim.initialize(800, 600);
@@ -65,6 +73,17 @@ describe('Simulation', () => {
     for (const boid of [...boids, predator]) {
       expect(boid.position.x).toBeLessThan(400);
     }
+  });
+
+  it('should let a predator chase a visible prey rather than a closer one behind a wall', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    sim.obstacles.add(Array.from({ length: 51 }, (_, i) => ({ x: 400, y: i * 12 })));
+    const predator = addBoid(sim, 380, 300, 0, 0, true);
+    addBoid(sim, 420, 300);                 // closer, but behind the wall
+    const visible = addBoid(sim, 250, 300); // farther, on the same side
+    sim.step();
+    expect(predator.preyLink).toBe(visible);
   });
 
   it('should carry the boids along a current', () => {

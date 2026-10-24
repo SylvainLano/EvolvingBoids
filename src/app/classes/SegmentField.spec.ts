@@ -8,6 +8,15 @@ describe('SegmentField', () => {
     expect(SegmentField.crosses({ x: 80, y: 50 }, { x: 95, y: 50 }, wall)).toBeFalse();
     // Beyond the end of the segment
     expect(SegmentField.crosses({ x: 95, y: 250 }, { x: 105, y: 250 }, wall)).toBeFalse();
+    // Exactly through its end, where the next segment of a line would join
+    expect(SegmentField.crosses({ x: 95, y: 200 }, { x: 105, y: 200 }, wall)).toBeTrue();
+  });
+
+  it('should block a line of sight crossing a line at one of its joints', () => {
+    const field = new SegmentField(30);
+    field.add([{ x: 100, y: 0 }, { x: 100, y: 100 }, { x: 100, y: 200 }]);
+    expect(field.blocks({ x: 50, y: 100 }, { x: 150, y: 100 })).toBeTrue();
+    expect(field.blocks({ x: 50, y: 300 }, { x: 150, y: 300 })).toBeFalse();
   });
 
   it('should find the closest point of a segment', () => {

@@ -28,13 +28,30 @@
         <div>{{ inspection.lifeLabel }} : {{ inspection.life }}</div>
         <div *ngIf="inspection.energy !== null">Energy : {{ inspection.energy }}</div>
     </div>
+    <div class="challenge-card" *ngIf="challenges.active !== null && !demo.active" [ngClass]="darkMode ? 'challenge-card-dark' : 'challenge-card-light'">
+        <div class="challenge-title">{{ challenges.active.title }}</div>
+        <div class="challenge-goal">{{ challenges.active.goal }}</div>
+        <div class="challenge-bar">
+            <div class="challenge-bar-fill" [style.width.%]="challenges.progress.ratio * 100"
+                [class.challenge-won]="challenges.state === 'won'" [class.challenge-lost]="challenges.state === 'lost'"></div>
+        </div>
+        <div>{{ challenges.progress.text }}</div>
+        <div class="challenge-goal" *ngIf="challenges.budgetText !== ''">{{ challenges.budgetText }}</div>
+        <div class="challenge-result challenge-won" *ngIf="challenges.state === 'won'">Challenge completed!</div>
+        <div class="challenge-result challenge-lost" *ngIf="challenges.state === 'lost'">Challenge failed</div>
+        <div class="challenge-buttons">
+            <button type="button" class="tool-button" (click)="challenges.retry()">Retry</button>
+            <button type="button" class="tool-button" (click)="challenges.close()">{{ challenges.state === 'running' ? 'Abandon' : 'Close' }}</button>
+        </div>
+    </div>
     <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
 <div class="tool-bar" [class.demo-hidden]="demo.active" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">
     <button *ngFor="let item of tools; let i = index" type="button" class="tool-button"
-        [class.tool-selected]="tool === item.id" [title]="item.title" (click)="selectTool(item.id)">
+        [class.tool-selected]="tool === item.id" [title]="challenges.isAllowed(item.id) ? item.title : 'Not allowed during this challenge'"
+        [disabled]="!challenges.isAllowed(item.id)" (click)="selectTool(item.id)">
         <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
     </button>
     <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="sim.clearDrawings()">Clear</button>
@@ -62,7 +79,7 @@
                     -> <a (click)="sim.pauseSimulation = !sim.pauseSimulation">{{ sim.pauseSimulation ? 'Resume' : 'Pause' }} Simulation</a>
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
-                    -> <a (click)="restart()">Restart Simulation</a>
+                    -> <a (click)="restartButton()">Restart {{ challenges.active !== null ? 'Challenge' : 'Simulation' }}</a>
                 </p>
                 <p title="Speed up the simulation to watch the evolution, also with the + and - keys">
                     Speed :
@@ -319,6 +336,16 @@
                     <input matSliderThumb [value]="sim.predatorStarvationModificator">
                     </mat-slider>
                 </p>
+            </div>
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="openOptions === 'Challenges'">
+                <div class="challenge-item" *ngFor="let challenge of challenges.challenges">
+                    <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'">
+                        -> <a (click)="startChallenge(challenge)">{{ challenge.title }}</a>
+                        <span class="challenge-done" *ngIf="challenges.results[challenge.id] !== undefined"
+                            title="Completed, best time in simulated time">&#10003; {{ clock(challenges.results[challenge.id]) }}</span>
+                    </p>
+                    <p class="challenge-description">{{ challenge.goal }}<br>{{ challenge.hint }}</p>
+                </div>
             </div>
         </form>
     </div>

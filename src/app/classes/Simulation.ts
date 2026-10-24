@@ -107,6 +107,7 @@ export class Simulation {
   stats = new Statistics();
   totalBoids = 0;
   totalPredators = 0;
+  elapsedSteps = 0;                   // simulation steps since the start, the pauses excluded
 
   // Inputs from the display
   mousePosition: Point | null = null; // the mouse scares the boids like a predator, null when it doesn't
@@ -134,10 +135,11 @@ export class Simulation {
     this.boids = [];
     this.predators = [];
     this.totalBoids = this.totalPredators = 0;
+    this.elapsedSteps = 0;
 
     // Initialize boids with random positions and velocities
     for (let i = 0; i < this.numberOfBoids; i++) {
-      this.insertNewBoid (
+      this.createBoid (
         { x: Math.random() * width, y: Math.random() * height },
         { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
         false,
@@ -154,7 +156,7 @@ export class Simulation {
 
     // Initialize predators with random positions, velocities, and reproduction rate
     for (let i = 0; i < this.numberOfPredators; i++) {
-      this.insertNewBoid (
+      this.createBoid (
         { x: Math.random() * width, y: Math.random() * height },
         { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
         true,
@@ -199,6 +201,7 @@ export class Simulation {
     if ( this.pauseSimulation ) {
       return;
     }
+    this.elapsedSteps++;
 
     this.totalBoids = this.boids.length;
     // Super Predators are a tool of the user, they don't count as predators
@@ -408,8 +411,11 @@ export class Simulation {
       } else {
 
         let closestBoid = boid.preyLink;
+        if ( closestBoid !== null && !this.canSee(boid, closestBoid) ) {
+          closestBoid = null;
+        }
         if ( this.predatorVersatility || closestBoid === null ) {
-          closestBoid = boid.quadtree.findClosestRegularBoid(boid, this.predatorsCooperativeness);
+          closestBoid = this.findVisiblePrey(boid);
         }
 
         if ( closestBoid !== null ) {
@@ -504,6 +510,24 @@ export class Simulation {
     }
   }
 
+  // The obstacles hide the boids behind them
+  private canSee(hunter: Boid, prey: Boid): boolean {
+    return this.obstacles.isEmpty || !this.obstacles.blocks(hunter.position, prey.position);
+  }
+
+  // The closest prey not hidden by an obstacle: the closest ones are checked one by one, a few at most
+  private findVisiblePrey(predator: Boid): Boid | null {
+    const hidden = new Set<Boid>();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => !hidden.has(boid));
+      if ( prey === null || this.canSee(predator, prey) ) {
+        return prey;
+      }
+      hidden.add(prey);
+    }
+    return null;
+  }
+
   // A Super Predator hunts the closest boid or predator, until its lifetime is over
   private moveSuperPredator(superPredator: Boid, avoidBorders: Point) {
     superPredator.age++;
@@ -559,7 +583,7 @@ export class Simulation {
           continue;
         }
         const distance = this.calculateDistanceSquared(superPredator.position, other.position);
-        if ( distance < closestDistance ) {
+        if ( distance < closestDistance && this.canSee(superPredator, other) ) {
           closestDistance = distance;
           closest = other;
         }
@@ -829,6 +853,7 @@ export class Simulation {
     return Math.max(-1, Math.min(1, (value / defaultValue - 1) / this.traitScale));
   }
 
+  // A boid added during the simulation (birth, reinforcement, click) is refused when the FPS is too low
   insertNewBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
     reproductionCooldown: number, generation: number = 0, isMutant: boolean = false ): Boid | null {
     if ( this.errorFadeOut > 0 && !this.pauseSimulation ) {
@@ -840,7 +865,12 @@ export class Simulation {
       this.dealWithLowFPS();
       return null;
     }
+    return this.createBoid(position, velocity, isPredator, genome, reproductionCooldown, generation, isMutant);
+  }
 
+  // A boid of the initial population is always created, whatever the FPS at that moment
+  private createBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
+    reproductionCooldown: number, generation: number = 0, isMutant: boolean = false ): Boid {
     const boid: Boid = {
       position: position,
       velocity: velocity,

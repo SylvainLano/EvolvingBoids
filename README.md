@@ -23,11 +23,22 @@
 - A tool bar, or the keys 1 to 7, selects what the mouse does  
 - Boid, Predator: a click adds one, and the mouse scares the boids like a predator  
 - Super Predator: a click adds a golden predator, bigger and faster, that hunts boids and predators for 45 seconds then fades away. Predators flee it. It doesn't reproduce nor evolve, and isn't counted in the statistics  
-- Obstacle: a drag draws a wall that can't be crossed, boids and predators steer away from it and keep a small distance while following it  
+- Obstacle: a drag draws a wall that can't be crossed, boids and predators steer away from it and keep a small distance while following it. Predators don't chase the boids hidden behind a wall  
 - Current: a drag draws a current that carries the boids along, faster than they swim, and slowly turns them in its direction  
 - Eraser: holding the mouse removes the boids, and the parts of the obstacles, currents and plankton, under it  
 - Food: holding the mouse sows plankton, it fades away out of the fertile areas  
 - Obstacles and currents stay when the simulation restarts, the Clear button removes them  
+
+### The Challenges
+- Five challenges, in the Challenges Options, each with its own starting conditions and its own mouse tools (some with a limited number of uses):  
+  - Coexistence: keep both species alive for 10 minutes without reinforcement, through the booms and busts of the predators (3 predators to add)  
+  - Fortress: a Super Predator arrives every 15 seconds, keep at least 40 boids alive for 3 minutes  
+  - Lone Hunter: keep a single predator, that can't reproduce, alive for 4 minutes (10 boids to drop)  
+  - Arms Race: bring the average speed of the boids to +10 % within 20 minutes  
+  - Slow and Steady: bring the average speed of the boids to -6 % within 20 minutes  
+- The time is the simulated time, so the speed can be raised. A card shows the goal and the progress, the simulation pauses when the challenge is won or lost  
+- The settings of the user are restored when the challenge is closed, and the completed challenges are remembered in the browser  
+- Each challenge was checked by simulation: lost without any action, won with a simple strategy  
 
 ### The Charts and the Speed
 - Live charts show the populations, the plankton (compared to what the fertile areas can hold), and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
@@ -77,7 +88,7 @@
 ### Architecture
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection, the options  
-- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver  
+- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges  
 - `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton  
 
 ### Tests
@@ -89,5 +100,5 @@
 
 ### Futures developments and ideas
 - Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator automatically
-- Add line of sight  
+- Add a field of view (the line of sight is already blocked by the walls)  
 - Add movement anticipation for predators

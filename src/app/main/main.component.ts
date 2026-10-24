@@ -7,11 +7,10 @@ import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
 import { ChartRenderer } from '../classes/ChartRenderer';
 import { Simulation } from '../classes/Simulation';
+import { Challenge, ChallengeRunner, clock } from '../classes/Challenges';
+import { Tool } from '../classes/Tool';
 
-// What a click or a drag with the mouse does
-type Tool = 'boid' | 'predator' | 'superPredator' | 'obstacle' | 'current' | 'eraser' | 'food';
-
-type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator';
+type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
 
 // Content and position of the card describing the inspected boid
 interface Inspection {
@@ -35,6 +34,8 @@ interface Inspection {
 export class MainComponent implements OnInit, OnDestroy {
   readonly sim = new Simulation();
   demo = new DemoMode(this);
+  challenges = new ChallengeRunner(this.sim, () => this.restart());
+  readonly clock = clock;
 
   // Display
   renderer: 'canvas' | 'dom' = 'canvas';        // the DOM renderer is kept to compare performances
@@ -45,7 +46,7 @@ export class MainComponent implements OnInit, OnDestroy {
   displayFPSCount = false;
   displayBoidCount = true;
   displayCharts = true;                         // live charts of the populations, of the plankton and of the average genes
-  readonly optionsPanels: OptionsPanel[] = ['Simulation', 'Display', 'Boids', 'Predator'];
+  readonly optionsPanels: OptionsPanel[] = ['Simulation', 'Display', 'Boids', 'Predator', 'Challenges'];
   openOptions: OptionsPanel | null = null;      // only one panel of options is open at a time
   finalQuadtreeList: Quadtree[] = [];
 
@@ -163,6 +164,23 @@ export class MainComponent implements OnInit, OnDestroy {
     this.mutantHalos = [];
   }
 
+  // During a challenge, restarting means trying the challenge again
+  restartButton() {
+    if ( this.challenges.active !== null ) {
+      this.challenges.retry();
+    } else {
+      this.restart();
+    }
+  }
+
+  startChallenge(challenge: Challenge) {
+    this.challenges.start(challenge);
+    this.openOptions = null;
+    if ( !this.challenges.isAllowed(this.tool) ) {
+      this.selectTool(challenge.tools[0]);
+    }
+  }
+
   toggleOptions(panel: OptionsPanel) {
     this.openOptions = this.openOptions === panel ? null : panel;
   }
@@ -212,10 +230,14 @@ export class MainComponent implements OnInit, OnDestroy {
   // Clicks on the options or the tool bar are not meant for the tools
   isOnInterface(event: MouseEvent): boolean {
     const target = event.target as Element | null;
-    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar') !== null;
+    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar, .challenge-card') !== null;
   }
 
+  // Some tools are not allowed during a challenge
   selectTool(tool: Tool) {
+    if ( !this.challenges.isAllowed(tool) ) {
+      return;
+    }
     this.tool = tool;
     this.stroke = null;
     this.setInspecting(this.inspecting);
@@ -262,7 +284,8 @@ export class MainComponent implements OnInit, OnDestroy {
       this.demo.onMouseMove();
       return;
     }
-    if ( this.isOnInterface(event) ) {
+    // During a challenge, some tools can only be used a few times
+    if ( this.isOnInterface(event) || !this.toolScares || !this.challenges.use(this.tool) ) {
       return;
     }
     const position = { x: event.clientX, y: event.clientY };
@@ -387,6 +410,7 @@ export class MainComponent implements OnInit, OnDestroy {
       this.sim.step();
       this.stepAccumulator -= stepDuration;
     }
+    this.challenges.update();
 
     this.updateFPS(timestamp);
     this.render(timestamp);

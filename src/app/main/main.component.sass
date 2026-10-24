@@ -116,6 +116,83 @@
   opacity: 0.5
   margin-right: 5px
 
+.tool-button:disabled
+  opacity: 0.3
+  cursor: not-allowed
+
+.challenge-card
+  position: absolute
+  top: 60px
+  right: 20px
+  z-index: 10
+  width: 280px
+  padding: 10px 12px
+  border-radius: 8px
+  font-family: Monaco, monospace
+  font-size: 11px
+  line-height: 16px
+  user-select: none
+
+.challenge-card-light
+  @extend .inspect-card-light
+
+.challenge-card-dark
+  @extend .inspect-card-dark
+
+.challenge-title
+  font-weight: bold
+  font-size: 13px
+  margin-bottom: 4px
+
+.challenge-goal
+  opacity: 0.8
+  margin-bottom: 6px
+
+.challenge-bar
+  height: 6px
+  margin-bottom: 4px
+  border-radius: 3px
+  overflow: hidden
+  background-color: rgba(128, 128, 128, 0.25)
+
+.challenge-bar-fill
+  height: 100%
+  background-color: #38bdf8
+  transition: width 0.3s ease
+
+  &.challenge-won
+    background-color: #22c55e
+
+  &.challenge-lost
+    background-color: #ef4444
+
+.challenge-result
+  font-weight: bold
+  margin-top: 4px
+
+  &.challenge-won
+    color: #22c55e
+
+  &.challenge-lost
+    color: #ef4444
+
+.challenge-buttons
+  display: flex
+  gap: 6px
+  margin-top: 8px
+
+  .tool-button
+    border-color: rgba(128, 128, 128, 0.5)
+
+.challenge-description
+  margin: 0 0 10px 18px
+  font-size: 11px
+  opacity: 0.7
+
+.challenge-done
+  margin-left: 6px
+  color: #22c55e
+
 .inspect-card
   position: absolute
   z-index: 9

@@ -1,0 +1,108 @@
+import { ChallengeRunner, CHALLENGES, clock } from './Challenges';
+import { Simulation } from './Simulation';
+
+describe('Challenges', () => {
+  const storageKey = 'evolvingboids.challenges';
+  let sim: Simulation;
+  let runner: ChallengeRunner;
+  const challenge = (id: string) => CHALLENGES.find(c => c.id === id)!;
+
+  beforeEach(() => {
+    localStorage.removeItem(storageKey);
+    sim = new Simulation();
+    sim.initialize(800, 600);
+    runner = new ChallengeRunner(sim, () => sim.initialize(800, 600));
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(storageKey);
+  });
+
+  it('should format a duration as minutes and seconds', () => {
+    expect(clock(0)).toBe('0:00');
+    expect(clock(75.4)).toBe('1:15');
+  });
+
+  it('should start from its own settings, a new population and nothing drawn, then restore the settings', () => {
+    sim.obstacles.add([{ x: 10, y: 10 }, { x: 100, y: 10 }]);
+    const coexistence = challenge('coexistence');
+    runner.start(coexistence);
+    expect(sim.numberOfPredators).toBe(6);
+    expect(sim.predators.length).toBe(6);
+    expect(sim.simulationMode).toBe('Continued');
+    expect(sim.obstacles.isEmpty).toBeTrue();
+    runner.close();
+    expect(sim.numberOfPredators).toBe(3);
+    expect(sim.simulationMode).toBe('Infinite');
+    expect(runner.active).toBeNull();
+  });
+
+  it('should only allow the tools of the challenge', () => {
+    expect(runner.isAllowed('boid')).toBeTrue();
+    runner.start(challenge('fortress'));
+    expect(runner.isAllowed('obstacle')).toBeTrue();
+    expect(runner.isAllowed('boid')).toBeFalse();
+    expect(runner.isAllowed('eraser')).toBeFalse();
+  });
+
+  it('should count the uses of a tool with a budget', () => {
+    runner.start(challenge('coexistence'));
+    expect(runner.budgetText).toBe('3 predators left');
+    expect(runner.use('predator')).toBeTrue();
+    expect(runner.use('predator')).toBeTrue();
+    expect(runner.use('predator')).toBeTrue();
+    expect(runner.use('predator')).toBeFalse();
+    expect(runner.isAllowed('predator')).toBeFalse();
+    expect(runner.use('eraser')).toBeTrue();
+    runner.retry();
+    expect(runner.isAllowed('predator')).toBeTrue();
+  });
+
+  it('should be lost, and pause the simulation, when a species is extinct', () => {
+    runner.start(challenge('coexistence'));
+    for (const predator of sim.predators) {
+      predator.isDead = true;
+    }
+    runner.update();
+    expect(runner.state).toBe('lost');
+    expect(sim.pauseSimulation).toBeTrue();
+  });
+
+  it('should be won after holding on, and remember it', () => {
+    runner.start(challenge('lone-hunter'));
+    sim.elapsedSteps = 240 * sim.stepsPerSecond;
+    runner.update();
+    expect(runner.state).toBe('won');
+    expect(runner.results['lone-hunter']).toBe(240);
+    expect(JSON.parse(localStorage.getItem(storageKey)!)['lone-hunter']).toBe(240);
+    expect(new ChallengeRunner(sim, () => {}).results['lone-hunter']).toBe(240);
+  });
+
+  it('should send a Super Predator every 15 seconds in the Fortress', () => {
+    runner.start(challenge('fortress'));
+    const supers = () => sim.predators.filter(predator => predator.isSuper).length;
+    sim.elapsedSteps = 4 * sim.stepsPerSecond;
+    runner.update();
+    expect(supers()).toBe(0);
+    sim.elapsedSteps = 5 * sim.stepsPerSecond;
+    runner.update();
+    expect(supers()).toBe(1);
+    sim.elapsedSteps = 36 * sim.stepsPerSecond;
+    runner.update();
+    expect(supers()).toBe(3);
+  });
+
+  it('should start again from scratch on retry', () => {
+    runner.start(challenge('coexistence'));
+    sim.elapsedSteps = 1000;
+    for (const predator of sim.predators) {
+      predator.isDead = true;
+    }
+    runner.update();
+    runner.retry();
+    expect(runner.state).toBe('running');
+    expect(sim.elapsedSteps).toBe(0);
+    expect(sim.pauseSimulation).toBeFalse();
+    expect(sim.predators.length).toBe(6);
+  });
+});

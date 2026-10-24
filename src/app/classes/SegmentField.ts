@@ -10,6 +10,7 @@ export interface Segment {
 // Their segments are indexed by a grid, so a boid only checks the segments around it
 export class SegmentField {
   polylines: Point[][] = [];
+  private segments: Segment[] = [];
   private grid = new Map<number, Segment[]>();
   private static readonly noSegment: Segment[] = [];
 
@@ -68,6 +69,11 @@ export class SegmentField {
     return erased;
   }
 
+  // Whether a line from p1 to p2 crosses one of the segments, wherever they are: the line of sight between two points
+  blocks(p1: Point, p2: Point): boolean {
+    return this.segments.some(segment => SegmentField.crosses(p1, p2, segment));
+  }
+
   // The segments that may act on a point
   near(point: Point): Segment[] {
     return this.grid.get(this.key(Math.floor(point.x / this.cellSize), Math.floor(point.y / this.cellSize))) ?? SegmentField.noSegment;
@@ -80,9 +86,11 @@ export class SegmentField {
   // Each segment is registered in every cell its reach overlaps
   private rebuild() {
     this.grid.clear();
+    this.segments = [];
     for (const polyline of this.polylines) {
       for (let i = 1; i < polyline.length; i++) {
         const segment = { a: polyline[i - 1], b: polyline[i] };
+        this.segments.push(segment);
         const minX = Math.floor((Math.min(segment.a.x, segment.b.x) - this.reach) / this.cellSize);
         const maxX = Math.floor((Math.max(segment.a.x, segment.b.x) + this.reach) / this.cellSize);
         const minY = Math.floor((Math.min(segment.a.y, segment.b.y) - this.reach) / this.cellSize);
@@ -117,13 +125,14 @@ export class SegmentField {
     return (p.x - q.x) ** 2 + (p.y - q.y) ** 2;
   }
 
-  // Whether the move from p1 to p2 crosses the segment (touching doesn't count)
+  // Whether the move from p1 to p2 crosses the segment: p1 and p2 strictly on both sides of it (touching it doesn't count),
+  // through the segment or exactly through one of its ends (the joint of two segments of a line would be a gap otherwise)
   static crosses(p1: Point, p2: Point, segment: Segment): boolean {
     const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     const d1 = cross(segment.a, segment.b, p1);
     const d2 = cross(segment.a, segment.b, p2);
     const d3 = cross(p1, p2, segment.a);
     const d4 = cross(p1, p2, segment.b);
-    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && d3 * d4 <= 0;
   }
 }
