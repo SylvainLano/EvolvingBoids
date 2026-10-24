@@ -8,6 +8,15 @@ import { Statistics } from './Statistics';
 export type SimulationMode = 'DeathMatch' | 'Retry' | 'Continued' | 'Infinite';
 export type LowFPSAction = 'PopulationControl' | 'BudgetCuts' | 'Nothing';
 
+// What happens in the simulation, for the display: a death has its cause, a capture its hunter (boid) and prey (other)
+export type DeathCause = 'oldAge' | 'starved' | 'predatorStarved' | 'superPredatorGone' | 'erased';
+export type SimulationEventType = DeathCause | 'birth' | 'mutant' | 'caught' | 'gaveUp' | 'reinforcement' | 'superPredator';
+export interface SimulationEvent {
+  type: SimulationEventType;
+  boid: Boid;
+  other?: Boid;     // the parent of a newborn, the prey of a hunter
+}
+
 // The simulation engine: the boids, the predators and their world, without anything about the display
 export class Simulation {
   // Regular Boids
@@ -71,6 +80,9 @@ export class Simulation {
   captureDistance = 5;                // distance to get to eat a boid
   predatorsCooperativeness = true;    // Do Predator cooperative to chase different preys
   predatorVersatility = true;         // Can predators change prey after choosing one
+  chasePatience = 3;                  // in seconds: a predator that doesn't get closer to its prey for this long gives it up
+  chaseProgress = 5;                  // in px: what getting closer means
+  ignoreDuration = 10;                // in seconds: a prey given up is not chased again for this long
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
 
@@ -115,7 +127,7 @@ export class Simulation {
   minFPS = 20;
   errorMessage = '';
   errorFadeOut = 0;
-  onMutantBirth: (boid: Boid) => void = () => {};
+  onEvent: (event: SimulationEvent) => void = () => {};
 
   private boidGenePool: Heritage[] = [];
   private predatorGenePool: Heritage[] = [];
@@ -234,7 +246,7 @@ export class Simulation {
       if ( !boid.isPredator && !boid.isDead ) {
         boid.age++;
         if ( this.boidLifespan > 0 && boid.age >= this.boidLifespan * this.stepsPerSecond * boid.lifespanFactor * boid.geneCost ) {
-          this.kill(boid);
+          this.kill(boid, 'oldAge');
         }
       }
 
@@ -274,10 +286,13 @@ export class Simulation {
   }
 
   // A dead boid starts fading away, its genes are remembered for the reinforcements
-  kill(boid: Boid) {
+  kill(boid: Boid, cause?: DeathCause) {
     boid.isDead = true;
     if ( !boid.isSuper ) {
       this.rememberGenes(boid);
+    }
+    if ( cause !== undefined ) {
+      this.onEvent({ type: cause, boid });
     }
   }
 
@@ -387,7 +402,7 @@ export class Simulation {
       boid.energy -= this.boidBaseMetabolism + this.boidSwimCost * relativeSpeedSquared;
       if ( boid.energy <= 0 ) {
         boid.energy = 0;
-        this.kill(boid);
+        this.kill(boid, 'starved');
       }
     }
   }
@@ -407,7 +422,7 @@ export class Simulation {
     if ( boid.reproductionCooldown == 0 ) {
 
       if (boid.predationCounter >= ( this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 * boid.geneCost ) ) {
-        this.kill(boid);
+        this.kill(boid, 'predatorStarved');
       } else {
 
         let closestBoid = boid.preyLink;
@@ -423,7 +438,7 @@ export class Simulation {
 
           // Check if the predator has caught the boid
           if ( this.calculateDistanceSquared(boid.position, closestBoidPosition) < this.captureDistance**2 ) {
-            this.devour(closestBoid);
+            this.devour(closestBoid, boid);
 
             if ( Math.random() <= this.predatorReproductionChances/100 ) {
               this.giveBirth ( boid );
@@ -432,6 +447,9 @@ export class Simulation {
             boid.reproductionCooldown = boid.genome.reproductionRate;
             boid.predationCounter = 0;
             boid.preyLink = null;
+            boid.chased = null;
+          } else if ( this.tiresOfTheChase(boid, closestBoid) ) {
+            this.giveUpTheChase(boid, closestBoid);
           } else {
             if ( closestBoid.preyLink === null ) {
               // Remove the prey mark from the previous prey if it is different
@@ -518,8 +536,9 @@ export class Simulation {
   // The closest prey not hidden by an obstacle: the closest ones are checked one by one, a few at most
   private findVisiblePrey(predator: Boid): Boid | null {
     const hidden = new Set<Boid>();
+    const ignored = this.elapsedSteps < predator.ignoredUntil ? predator.ignoredPrey : null;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => !hidden.has(boid));
+      const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => boid !== ignored && !hidden.has(boid));
       if ( prey === null || this.canSee(predator, prey) ) {
         return prey;
       }
@@ -528,11 +547,43 @@ export class Simulation {
     return null;
   }
 
+  // A prey turning sharper than its predator can lead it round in circles: the predator gets tired of a chase
+  // that doesn't bring it closer, but keeps on as long as it gains ground
+  private tiresOfTheChase(predator: Boid, prey: Boid): boolean {
+    const distance = Math.sqrt(this.calculateDistanceSquared(predator.position, prey.position));
+    if ( predator.chased !== prey ) {
+      predator.chased = prey;
+      predator.closestApproach = distance;
+      predator.staleSteps = 0;
+      return false;
+    }
+    if ( distance < predator.closestApproach - this.chaseProgress ) {
+      predator.closestApproach = distance;
+      predator.staleSteps = 0;
+      return false;
+    }
+    return ++predator.staleSteps > this.chasePatience * this.stepsPerSecond;
+  }
+
+  // The prey given up is ignored for a while, the predator looks for an easier one
+  private giveUpTheChase(predator: Boid, prey: Boid) {
+    predator.ignoredPrey = prey;
+    predator.ignoredUntil = this.elapsedSteps + this.ignoreDuration * this.stepsPerSecond;
+    predator.chased = null;
+    if ( prey.preyLink === predator ) {
+      prey.preyLink = null;
+    }
+    if ( predator.preyLink === prey ) {
+      predator.preyLink = null;
+    }
+    this.onEvent({ type: 'gaveUp', boid: predator, other: prey });
+  }
+
   // A Super Predator hunts the closest boid or predator, until its lifetime is over
   private moveSuperPredator(superPredator: Boid, avoidBorders: Point) {
     superPredator.age++;
     if ( superPredator.age >= this.superPredatorLifetime * this.stepsPerSecond ) {
-      this.kill(superPredator);
+      this.kill(superPredator, 'superPredatorGone');
       return;
     }
 
@@ -540,7 +591,7 @@ export class Simulation {
     const target = this.closestTargetOfSuperPredator(superPredator);
     if ( target !== null ) {
       if ( this.calculateDistanceSquared(superPredator.position, target.position) < this.superPredatorCaptureDistance ** 2 ) {
-        this.devour(target);
+        this.devour(target, superPredator);
       } else {
         // It anticipates the movement of its target
         const direction = this.calculateDirection(superPredator.position, {
@@ -593,7 +644,7 @@ export class Simulation {
   }
 
   // An eaten boid disappears at once, an eaten predator fades away
-  private devour(target: Boid) {
+  private devour(target: Boid, hunter: Boid) {
     if ( target.preyLink !== null ) {
       target.preyLink.preyLink = null;
     }
@@ -604,6 +655,7 @@ export class Simulation {
       this.boids = this.boids.filter(other => other !== target);
       this.rememberGenes(target);
     }
+    this.onEvent({ type: 'caught', boid: hunter, other: target });
   }
 
   // The closest Super Predator a predator should flee, if any
@@ -721,7 +773,7 @@ export class Simulation {
         ? { x: Math.random() < 0.5 ? 2 : this.width - 2, y: Math.random() * this.height }
         : { x: Math.random() * this.width, y: Math.random() < 0.5 ? 2 : this.height - 2 };
       const { genome, generation } = heritages[i];
-      this.insertNewBoid (
+      const reinforcement = this.insertNewBoid (
         position,
         { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
         isPredator,
@@ -729,6 +781,10 @@ export class Simulation {
         Math.random() * (isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
         generation
       );
+      // One event for the whole group
+      if ( i === 0 && reinforcement !== null ) {
+        this.onEvent({ type: 'reinforcement', boid: reinforcement });
+      }
     }
   }
 
@@ -776,8 +832,11 @@ export class Simulation {
       isMutant
     );
 
-    if ( isMutant && child !== null ) {
-      this.onMutantBirth(child);
+    if ( child !== null ) {
+      this.onEvent({ type: 'birth', boid: child, other: parent });
+      if ( isMutant ) {
+        this.onEvent({ type: 'mutant', boid: child, other: parent });
+      }
     }
     return child;
   }
@@ -892,6 +951,11 @@ export class Simulation {
       alpha: 1,
       quadtree: this.quadtree,
       preyLink: null,
+      chased: null,
+      closestApproach: Infinity,
+      staleSteps: 0,
+      ignoredPrey: null,
+      ignoredUntil: 0,
       trail: []
     };
 
@@ -917,6 +981,7 @@ export class Simulation {
     );
     if ( superPredator !== null ) {
       superPredator.isSuper = true;
+      this.onEvent({ type: 'superPredator', boid: superPredator });
     }
     return superPredator;
   }
@@ -926,7 +991,7 @@ export class Simulation {
     const radiusSquared = radius ** 2;
     for (const boid of [...this.boids, ...this.predators]) {
       if ( !boid.isDead && this.calculateDistanceSquared(boid.position, center) < radiusSquared ) {
-        this.kill(boid);
+        this.kill(boid, 'erased');
       }
     }
     this.obstacles.erase(center, radius);

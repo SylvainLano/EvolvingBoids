@@ -59,7 +59,8 @@ export class CanvasRenderer {
   }
 
   // Groups are drawn in order, so the last one is on top
-  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[], highlighted: Boid | null, world: WorldDrawing) {
+  render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[],
+    highlighted: Boid | null, explained: Boid | { center: Point, radius: number } | null, world: WorldDrawing) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
     const now = performance.now();
@@ -121,6 +122,9 @@ export class CanvasRenderer {
     ctx.globalCompositeOperation = 'source-over';
     if (highlighted !== null) {
       this.drawHighlight(highlighted, options.darkMode);
+    }
+    if (explained !== null) {
+      this.drawExplained(explained, now);
     }
     if (world.eraser !== null) {
       this.drawEraser(world.eraser.position, world.eraser.radius, options.darkMode);
@@ -212,6 +216,23 @@ export class CanvasRenderer {
     ctx.beginPath();
     ctx.arc(boid.position.x, boid.position.y, this.bodyLength(boid) * 1.6, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  // A gently pulsing amber ring around what a bubble explains: a boid, or a whole area with a dashed line
+  private drawExplained(explained: Boid | { center: Point, radius: number }, now: number) {
+    const ctx = this.ctx;
+    const pulse = 1 + 0.1 * Math.sin(now / 250);
+    const isArea = 'center' in explained;
+    const center = isArea ? explained.center : explained.position;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
+    if (isArea) {
+      ctx.setLineDash([8, 6]);
+    }
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, (isArea ? explained.radius : this.bodyLength(explained) * 1.8) * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   private drawQuadtrees(quadtrees: Quadtree[], options: RenderOptions) {

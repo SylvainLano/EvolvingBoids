@@ -28,7 +28,14 @@
         <div>{{ inspection.lifeLabel }} : {{ inspection.life }}</div>
         <div *ngIf="inspection.energy !== null">Energy : {{ inspection.energy }}</div>
     </div>
-    <div class="challenge-card" *ngIf="challenges.active !== null && !demo.active" [ngClass]="darkMode ? 'challenge-card-dark' : 'challenge-card-light'">
+    <div class="explain-bubble" *ngIf="explainer.current !== null && explanationPosition !== null"
+        [ngClass]="darkMode ? 'explain-bubble-dark' : 'explain-bubble-light'"
+        [style.left.px]="explanationPosition.x" [style.top.px]="explanationPosition.y" (click)="nextExplanation()">
+        {{ explainer.current.text }}
+        <div class="explain-next">Click or press Enter for the next one</div>
+        <div class="explain-time" [style.width.%]="100 - explanationProgress * 100"></div>
+    </div>
+    <div class="challenge-card"*ngIf="challenges.active !== null && !demo.active" [ngClass]="darkMode ? 'challenge-card-dark' : 'challenge-card-light'">
         <div class="challenge-title">{{ challenges.active.title }}</div>
         <div class="challenge-goal">{{ challenges.active.goal }}</div>
         <div class="challenge-bar">
@@ -48,13 +55,17 @@
     <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
 </div>
 
-<div class="tool-bar" [class.demo-hidden]="demo.active" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">
+<div class="tool-bar" [class.demo-hidden]="demo.active" [class.tool-bar-attention]="explainGlows" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">
     <button *ngFor="let item of tools; let i = index" type="button" class="tool-button"
         [class.tool-selected]="tool === item.id" [title]="challenges.isAllowed(item.id) ? item.title : 'Not allowed during this challenge'"
         [disabled]="!challenges.isAllowed(item.id)" (click)="selectTool(item.id)">
         <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
     </button>
+    <!-- Not tools, but actions -->
+    <span class="tool-separator"></span>
     <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="sim.clearDrawings()">Clear</button>
+    <button type="button" class="tool-button" [class.tool-selected]="explainer.enabled" [class.tool-glow]="explainGlows"
+        title="Explain what happens on the screen, in short bubbles (E)" (click)="toggleExplain()">Explain</button>
 </div>
 
 <div class="display-container" [class.demo-hidden]="demo.active">

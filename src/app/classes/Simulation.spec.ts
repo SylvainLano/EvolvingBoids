@@ -86,6 +86,38 @@ describe('Simulation', () => {
     expect(predator.preyLink).toBe(visible);
   });
 
+  it('should let a predator give up a chase that makes no progress, and chase another prey', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    const events: string[] = [];
+    sim.onEvent = (event) => events.push(event.type);
+    const predator = addBoid(sim, 300, 300, 0, 0, true);
+    const tiresome = addBoid(sim, 340, 300);
+    const other = addBoid(sim, 300, 420);
+    // A chase going on for a while without getting closer than 20 px
+    predator.chased = tiresome;
+    predator.closestApproach = 20;
+    predator.staleSteps = sim.chasePatience * sim.stepsPerSecond;
+    sim.step();
+    expect(events).toContain('gaveUp');
+    expect(predator.ignoredPrey).toBe(tiresome);
+    sim.step();
+    expect(predator.chased).toBe(other);
+  });
+
+  it('should keep on chasing as long as the predator gains ground', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    const predator = addBoid(sim, 300, 300, 0, 0, true);
+    const prey = addBoid(sim, 340, 300);
+    predator.chased = prey;
+    predator.closestApproach = 100;
+    predator.staleSteps = sim.chasePatience * sim.stepsPerSecond;
+    sim.step();
+    expect(predator.ignoredPrey).toBeNull();
+    expect(predator.staleSteps).toBe(0);
+  });
+
   it('should carry the boids along a current', () => {
     const sim = emptySimulation();
     sim.foodEnabled = false;
@@ -168,6 +200,41 @@ describe('Simulation', () => {
       expect(child.genome.maxVelocity).toBeLessThanOrEqual(sim.boidMaxVelocity * (1 + sim.boidEvolutionCap / 100));
       expect(child.genome.maxVelocity).toBeGreaterThanOrEqual(sim.boidMaxVelocity * (1 - sim.boidEvolutionCap / 100));
     }
+  });
+
+  it('should tell the display about the births, the mutants, the captures and the causes of death', () => {
+    const sim = emptySimulation();
+    const events: string[] = [];
+    sim.onEvent = (event) => events.push(event.type);
+    sim.boidEvolutionChances = 100;
+    const parent = addBoid(sim, 100, 100);
+    sim.giveBirth(parent, addBoid(sim, 110, 100));
+    expect(events).toEqual(['birth', 'mutant']);
+
+    events.length = 0;
+    const old = addBoid(sim, 300, 300);
+    old.age = 1e9;
+    sim.step();
+    expect(events).toContain('oldAge');
+
+    events.length = 0;
+    sim.erase({ x: 100, y: 100 }, 30);
+    expect(events).toContain('erased');
+  });
+
+  it('should tell which predator caught which prey', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    const captures: { hunter: Boid, prey?: Boid }[] = [];
+    sim.onEvent = (event) => {
+      if (event.type === 'caught') {
+        captures.push({ hunter: event.boid, prey: event.other });
+      }
+    };
+    const predator = addBoid(sim, 300, 300, 0, 0, true);
+    const prey = addBoid(sim, 302, 300);
+    sim.step();
+    expect(captures).toEqual([{ hunter: predator, prey }]);
   });
 
   it('should erase the boids within the radius only', () => {

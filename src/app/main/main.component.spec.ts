@@ -64,7 +64,14 @@ describe('MainComponent', () => {
     expect(component.timeScale).toBe(1);
   });
 
+  it('should start in dark mode, without the Quadtree', () => {
+    expect(component.darkMode).toBeTrue();
+    expect(component.drawQuadtree).toBeFalse();
+  });
+
   it('should restore the settings when the demo stops', () => {
+    component.darkMode = false;
+    component.drawQuadtree = true;
     component.demo.start(false);
     expect(component.darkMode).toBeTrue();
     expect(component.drawQuadtree).toBeFalse();

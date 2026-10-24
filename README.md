@@ -7,6 +7,7 @@
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
 - The animation loop runs outside of Angular's zone, the counters are refreshed 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
+- The simulation starts in Dark Mode, without the Quadtree drawn: both can be changed in the Display Options  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
 
@@ -29,6 +30,12 @@
 - Food: holding the mouse sows plankton, it fades away out of the fertile areas  
 - Obstacles and currents stay when the simulation restarts, the Clear button removes them  
 
+### The Explain Mode
+- The Explain button, at the top next to the tools, or the E key, shows short bubbles about what happens on the screen, when it happens. On the first visit, the button glows and pulses to catch the eye  
+- A bubble stands still next to what it explains, circled in amber: the boid an event happened to, or an area of the screen (a flock, the plankton, a wall). It stands on the side of the center of the screen, so no edge cuts it  
+- It starts with how a flock works, then explains the births, the mutants, the captures, the predators giving up a chase, the deaths of old age and of hunger, the reinforcements, the Super Predators, the round generations, the fleeing flocks, the plankton, the colors, the walls and the charts  
+- One bubble at a time, long enough to read it calmly (a bar shows the time left), a click on the bubble or the Enter key shows the next one. Every explanation is shown once, then comes back now and then  
+
 ### The Challenges
 - Five challenges, in the Challenges Options, each with its own starting conditions and its own mouse tools (some with a limited number of uses):  
   - Coexistence: keep both species alive for 10 minutes without reinforcement, through the booms and busts of the predators (3 predators to add)  
@@ -44,7 +51,7 @@
 - Live charts show the populations, the plankton (compared to what the fertile areas can hold), and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
 - The highest generation of each species is displayed with the boid counts  
 - A ring spreads around each newborn mutant  
-- Holding Shift and hovering a boid shows its generation, genes, and age (or hunger for a Predator), the mouse then doesn't scare the boids  
+- Holding Shift and hovering a boid shows its generation, genes, and age (or hunger for a Predator), the mouse then doesn't scare the boids. When the mouse stops, the card stands still to be read and its boid stays circled, until the mouse moves or Shift is released  
 - The simulation can be sped up x2, x4 or x8 in the Simulation Options, or with the + and - keys, to watch the evolution  
 
 ### The Demo Mode
@@ -62,6 +69,7 @@
 ### The Boids
 - Regular Boids have alignment, cohesion and separation  
 - Predators only have separation  
+- A Predator tires of a chase that makes no progress for 3 seconds (a prey turning more sharply than it can, going round in circles): it leaves this prey alone for 10 seconds and looks for another one  
 - Regular Boids need a partner to reproduce, heading roughly the same way, and both should have had some quiet time with no fleeing  
 - Regular Boids reproduce less as the screen gets crowded (logistic growth), and stop at 1 boid per 4000 px²  
 - Regular Boids die of old age after about 3 minutes (+/- 20 %), the lifespan can be modified in the options, 0 makes them immortal  
@@ -88,7 +96,7 @@
 ### Architecture
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection, the options  
-- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges  
+- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation  
 - `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton  
 
 ### Tests

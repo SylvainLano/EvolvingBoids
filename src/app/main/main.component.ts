@@ -9,6 +9,7 @@ import { ChartRenderer } from '../classes/ChartRenderer';
 import { Simulation } from '../classes/Simulation';
 import { Challenge, ChallengeRunner, clock } from '../classes/Challenges';
 import { Tool } from '../classes/Tool';
+import { Explainer, ExplanationArea, isArea } from '../classes/Explainer';
 
 type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
 
@@ -36,12 +37,21 @@ export class MainComponent implements OnInit, OnDestroy {
   demo = new DemoMode(this);
   challenges = new ChallengeRunner(this.sim, () => this.restart());
   readonly clock = clock;
+  explainer = new Explainer();
+  explanationPosition: Point | null = null;     // where the bubble of the explanation is drawn
+  explanationProgress = 0;                      // part of the reading time elapsed, from 0 to 1
+  explained: Boid | ExplanationArea | null = null;
+  private explanationStart = -1;
+  private explanationPoint: Point | null = null;  // where the subject of the bubble was when it appeared, null for the charts
+  private explanationMargin = 30;
+  explainGlows = !MainComponent.explainSeen();  // on the first visit, the Explain button glows to catch the eye
+  private static readonly explainSeenKey = 'evolvingboids.explainSeen';
 
   // Display
   renderer: 'canvas' | 'dom' = 'canvas';        // the DOM renderer is kept to compare performances
-  darkMode = false;
+  darkMode = true;                              // the boids glow beautifully on a dark sea
   glow = true;                                  // additive blending and halos with the canvas renderer, in dark mode
-  drawQuadtree = true;
+  drawQuadtree = false;
   displayQuadtreeCount = true;
   displayFPSCount = false;
   displayBoidCount = true;
@@ -84,6 +94,8 @@ export class MainComponent implements OnInit, OnDestroy {
   // Inspection of a boid, while Shift is held
   inspecting = false;
   readonly inspectRadius = 30;                  // distance in px from the mouse to pick a boid to inspect
+  readonly inspectionStillDelay = 250;          // in ms without moving the mouse before the card stands still
+  private lastPointerMove = 0;
   inspectedBoid: Boid | null = null;
   inspection: Inspection | null = null;
   mutantHalos: MutantHalo[] = [];
@@ -102,8 +114,15 @@ export class MainComponent implements OnInit, OnDestroy {
   @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
 
   constructor(private el: ElementRef, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
-    // A ring spreads around each newborn mutant, in real time so it stays visible when the simulation is sped up
-    this.sim.onMutantBirth = (boid) => this.mutantHalos.push({ boid, start: performance.now() });
+    this.sim.onEvent = (event) => {
+      // A ring spreads around each newborn mutant, in real time so it stays visible when the simulation is sped up
+      if ( event.type === 'mutant' ) {
+        this.mutantHalos.push({ boid: event.boid, start: performance.now() });
+      }
+      if ( !this.demo.active ) {
+        this.explainer.notify(event, performance.now());
+      }
+    };
   }
 
   ngOnInit(): void {
@@ -185,6 +204,27 @@ export class MainComponent implements OnInit, OnDestroy {
     this.openOptions = this.openOptions === panel ? null : panel;
   }
 
+  toggleExplain() {
+    this.explainer.setEnabled(!this.explainer.enabled, performance.now(), this.sim, this.displayCharts);
+    if ( this.explainGlows ) {
+      this.explainGlows = false;
+      try {
+        localStorage.setItem(MainComponent.explainSeenKey, 'true');
+      } catch {
+        // Not remembered: the button will glow again on the next visit
+      }
+    }
+  }
+
+  // Whether the visitor already used the Explain mode, the browser may refuse to tell (private browsing...)
+  private static explainSeen(): boolean {
+    try {
+      return localStorage.getItem(MainComponent.explainSeenKey) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
   handleKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) {
       return;
@@ -193,11 +233,19 @@ export class MainComponent implements OnInit, OnDestroy {
       this.setInspecting(true);
       return;
     }
+    // Enter shows the next explanation, instead of clicking the focused button
+    if (event.key === 'Enter' && this.explainer.current !== null) {
+      event.preventDefault();
+      this.nextExplanation();
+      return;
+    }
     if (/^[1-9]$/.test(event.key) && !this.demo.active) {
       const tool = this.tools[Number(event.key) - 1];
       if (tool) {
         this.selectTool(tool.id);
       }
+    } else if ((event.key === 'e' || event.key === 'E') && !this.demo.active) {
+      this.toggleExplain();
     } else if (event.key === 'd' || event.key === 'D') {
       this.demo.toggle();
     } else if (event.key === 'Escape') {
@@ -216,6 +264,7 @@ export class MainComponent implements OnInit, OnDestroy {
       return;
     }
     this.pointerPosition = { x: event.clientX, y: event.clientY };
+    this.lastPointerMove = performance.now();
     this.setInspecting(event.shiftKey);
 
     // The line being drawn gets a new point every few pixels
@@ -230,7 +279,7 @@ export class MainComponent implements OnInit, OnDestroy {
   // Clicks on the options or the tool bar are not meant for the tools
   isOnInterface(event: MouseEvent): boolean {
     const target = event.target as Element | null;
-    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar, .challenge-card') !== null;
+    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar, .challenge-card, .explain-bubble') !== null;
   }
 
   // Some tools are not allowed during a challenge
@@ -323,19 +372,26 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   // The closest living boid under the mouse, and the card describing it next to the mouse
+  // When the mouse stops, the card stays on the last boid and stands still to be read, while its boid stays circled
   updateInspection() {
-    this.inspectedBoid = null;
-    this.inspection = null;
     const pointer = this.pointerPosition;
     if ( !this.inspecting || pointer === null || this.demo.active ) {
+      this.inspectedBoid = null;
+      this.inspection = null;
       return;
     }
-    let closestDistance = this.inspectRadius ** 2;
-    for (const boid of [...this.sim.boids, ...this.sim.predators]) {
-      const distance = this.sim.calculateDistanceSquared(boid.position, pointer);
-      if ( !boid.isDead && distance < closestDistance ) {
-        closestDistance = distance;
-        this.inspectedBoid = boid;
+    const still = this.inspection !== null && this.inspectedBoid !== null && !this.inspectedBoid.isDead
+      && performance.now() - this.lastPointerMove >= this.inspectionStillDelay;
+    if ( !still ) {
+      this.inspectedBoid = null;
+      this.inspection = null;
+      let closestDistance = this.inspectRadius ** 2;
+      for (const boid of [...this.sim.boids, ...this.sim.predators]) {
+        const distance = this.sim.calculateDistanceSquared(boid.position, pointer);
+        if ( !boid.isDead && distance < closestDistance ) {
+          closestDistance = distance;
+          this.inspectedBoid = boid;
+        }
       }
     }
     const boid = this.inspectedBoid;
@@ -362,12 +418,12 @@ export class MainComponent implements OnInit, OnDestroy {
         : `${seconds(boid.age)} s / immortal`;
     }
 
-    // The card stays inside the window
+    // The card stays inside the window, and where it was while the mouse is still
     const cardWidth = 230;
     const cardHeight = 110;
     this.inspection = {
-      x: pointer.x + 16 + cardWidth > sim.width ? pointer.x - 16 - cardWidth : pointer.x + 16,
-      y: pointer.y + 16 + cardHeight > sim.height ? pointer.y - 16 - cardHeight : pointer.y + 16,
+      x: still ? this.inspection!.x : pointer.x + 16 + cardWidth > sim.width ? pointer.x - 16 - cardWidth : pointer.x + 16,
+      y: still ? this.inspection!.y : pointer.y + 16 + cardHeight > sim.height ? pointer.y - 16 - cardHeight : pointer.y + 16,
       title: boid.isSuper
         ? 'Super Predator'
         : `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
@@ -380,6 +436,58 @@ export class MainComponent implements OnInit, OnDestroy {
       life,
       energy: sim.foodEnabled && !boid.isPredator ? `${Math.round(boid.energy * 100)} %` : null,
     };
+  }
+
+  // The bubble of the explanation follows its boid, above and to the right of it, inside the window; or stands above the charts
+  private updateExplanation(now: number) {
+    if ( !this.demo.active ) {
+      this.explainer.update(this.sim, now, this.displayCharts);
+    }
+    const current = this.demo.active ? null : this.explainer.current;
+    if ( current === null ) {
+      this.explanationPosition = null;
+      this.explained = null;
+      this.explanationStart = -1;
+      return;
+    }
+    this.explanationProgress = Math.min(1, (now - current.start) / current.duration);
+    this.explained = current.anchor === 'charts' ? null : current.anchor;
+
+    // The bubble is placed from where its subject was when it appeared, then stands still for an easy reading,
+    // even if its boid swims away. It is only kept inside the window, with its size measured once displayed
+    if ( current.start !== this.explanationStart ) {
+      this.explanationStart = current.start;
+      this.explanationPoint = current.anchor === 'charts' ? null
+        : { ...(isArea(current.anchor) ? current.anchor.center : current.anchor.position) };
+      this.explanationMargin = current.anchor !== 'charts' && isArea(current.anchor) ? current.anchor.radius : 30;
+    }
+    const bubble: HTMLElement | null = this.el.nativeElement.querySelector('.explain-bubble');
+    const width = bubble?.offsetWidth || 400;
+    const height = bubble?.offsetHeight || 200;
+    const { width: screenWidth, height: screenHeight } = this.sim;
+    let x: number;
+    let y: number;
+    if ( this.explanationPoint === null ) {
+      // Above the charts
+      x = screenWidth - 20 - width;
+      y = screenHeight - 20 - 240 - 10 - height;
+    } else {
+      // On the side of the center of the screen, so it doesn't go off the edges
+      const point = this.explanationPoint;
+      const margin = this.explanationMargin;
+      x = point.x < screenWidth / 2 ? point.x + margin : point.x - margin - width;
+      y = point.y < screenHeight / 2 ? point.y + margin : point.y - margin - height;
+    }
+    // Inside the window, below the tool bar
+    this.explanationPosition = {
+      x: Math.min(screenWidth - width - 10, Math.max(10, x)),
+      y: Math.min(screenHeight - height - 10, Math.max(60, y)),
+    };
+  }
+
+  // The user read the bubble: the next one comes right away
+  nextExplanation() {
+    this.explainer.next(performance.now());
   }
 
   // Animation loop
@@ -439,6 +547,7 @@ export class MainComponent implements OnInit, OnDestroy {
     const now = performance.now();
     this.mutantHalos = this.mutantHalos.filter(halo => now - halo.start < this.canvasRenderer.mutantHaloDuration);
     this.updateInspection();
+    this.updateExplanation(now);
     this.finalQuadtreeList = this.drawQuadtree ? this.sim.quadtree.retrieveFinalQuadtrees() : [];
 
     // The world is always drawn on the canvas, the boids only with the Canvas renderer: with the DOM one, they are HTML elements above it
@@ -449,6 +558,7 @@ export class MainComponent implements OnInit, OnDestroy {
       { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount },
       this.mutantHalos,
       this.inspectedBoid,
+      this.explained,
       {
         food: sim.foodEnabled
           ? { texture: sim.food.texture(this.darkMode), width: sim.food.cols * sim.food.cellSize, height: sim.food.rows * sim.food.cellSize }

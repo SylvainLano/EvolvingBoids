@@ -38,5 +38,10 @@ export interface Boid {
   predationCounter: number; // predationCounter is time without predation for boids, and time without predating for predators
   quadtree: Quadtree;
   preyLink : Boid | null;   // for Regular Boids, the Predator that chase them, for Predators, the prey !
+  chased: Boid | null;      // predators: the prey of the current chase, to give it up when the chase makes no progress
+  closestApproach: number;  // predators: the shortest distance to the chased prey so far
+  staleSteps: number;       // predators: simulation steps since the chase last made some progress
+  ignoredPrey: Boid | null; // predators: a prey given up, not chased again for a while
+  ignoredUntil: number;     // predators: the elapsed step until which the given up prey is ignored
   trail: Point[];           // last positions, oldest first, drawn as a trail by the canvas renderer
 }
