@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A small flock of glowing boids, drawn like in the simulation, on the dark sea with some plankton -->
+  <defs>
+    <radialGradient id="plankton" cx="0.28" cy="0.78" r="0.62">
+      <stop offset="0" stop-color="#14b8a6" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0.15" y1="0.85" x2="0.85" y2="0.15">
+      <stop offset="0" stop-color="#7c6cff"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <rect width="64" height="64" rx="14" fill="url(#plankton)"/>
+  <!-- The glow, then the bodies: the leader and two followers -->
+  <g fill="url(#body)" filter="url(#glow)" opacity="0.8">
+    <path d="M54.1 11 L39.4 43.1 L36.5 28.5 L22 25.6 Z"/>
+    <path d="M30.5 44.5 L23.7 59.5 L22.3 52.7 L15.5 51.3 Z"/>
+    <path d="M20.5 34.5 L13.7 49.5 L12.3 42.7 L5.5 41.3 Z"/>
+  </g>
+  <g fill="url(#body)">
+    <path d="M54.1 11 L39.4 43.1 L36.5 28.5 L22 25.6 Z"/>
+    <path d="M30.5 44.5 L23.7 59.5 L22.3 52.7 L15.5 51.3 Z"/>
+    <path d="M20.5 34.5 L13.7 49.5 L12.3 42.7 L5.5 41.3 Z"/>
+  </g>
+</svg>
