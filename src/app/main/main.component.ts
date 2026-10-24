@@ -86,7 +86,7 @@ export class MainComponent implements OnInit, OnDestroy {
   private lastFrameTime = performance.now();
   private readonly fpsUpdateInterval = 100;
 
-  // Mouse tools, selected in the tool bar or with the keys 1 to 7
+  // Mouse tools, selected in the tool bar or with the keys 1 to 8
   tool: Tool = 'predator';
   readonly tools: { id: Tool, label: string, title: string }[] = [
     { id: 'boid', label: 'Boid', title: 'Click to add a boid' },
@@ -96,6 +96,7 @@ export class MainComponent implements OnInit, OnDestroy {
     { id: 'current', label: 'Current', title: 'Drag to draw a current carrying the boids along' },
     { id: 'eraser', label: 'Eraser', title: 'Hold and move to remove boids, obstacles, currents and plankton' },
     { id: 'food', label: 'Food', title: 'Hold and move to sow plankton, it fades away out of the fertile areas' },
+    { id: 'plant', label: 'Plant', title: 'Click to plant an alga: the boids nibble it, it grows in summer and withers in winter' },
   ];
   readonly eraserRadius = 30;
   readonly sowRadius = 40;
@@ -308,6 +309,17 @@ export class MainComponent implements OnInit, OnDestroy {
     return colors[this.sim.season.name][this.darkMode ? 0 : 1];
   }
 
+  // The algae are green in spring and summer, yellow in autumn, brown in winter
+  get plantColor(): string {
+    const colors = {
+      Spring: ['rgba(74, 222, 128, 0.75)', 'rgba(22, 163, 74, 0.75)'],
+      Summer: ['rgba(34, 197, 94, 0.75)', 'rgba(21, 128, 61, 0.75)'],
+      Autumn: ['rgba(190, 180, 60, 0.75)', 'rgba(161, 98, 7, 0.75)'],
+      Winter: ['rgba(150, 110, 75, 0.75)', 'rgba(120, 88, 58, 0.75)'],
+    };
+    return colors[this.sim.seasonsEnabled ? this.sim.season.name : 'Summer'][this.darkMode ? 0 : 1];
+  }
+
   // A phone, where the charts would cover a large part of the screen
   private static isNarrow(): boolean {
     return window.matchMedia('(max-width: 600px)').matches;
@@ -395,7 +407,7 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   get toolDraws(): boolean {
-    return this.tool === 'obstacle' || this.tool === 'current' || this.tool === 'eraser' || this.tool === 'food';
+    return this.tool === 'obstacle' || this.tool === 'current' || this.tool === 'eraser' || this.tool === 'food' || this.tool === 'plant';
   }
 
   handleMouseDown(event: MouseEvent) {
@@ -437,10 +449,15 @@ export class MainComponent implements OnInit, OnDestroy {
       return;
     }
     // During a challenge, some tools can only be used a few times
-    if ( this.isOnInterface(event) || !this.toolScares || !this.challenges.use(this.tool) ) {
+    const clicked = this.toolScares || this.tool === 'plant';
+    if ( this.isOnInterface(event) || !clicked || !this.challenges.use(this.tool) ) {
       return;
     }
     const position = { x: event.clientX, y: event.clientY };
+    if ( this.tool === 'plant' ) {
+      this.sim.plants.add(position);
+      return;
+    }
     if ( this.tool === 'boid' || this.tool === 'predator' ) {
       const isPredator = this.tool === 'predator';
       this.sim.insertNewBoid(
@@ -676,6 +693,9 @@ export class MainComponent implements OnInit, OnDestroy {
       {
         food: sim.foodEnabled
           ? { texture: sim.food.texture(this.darkMode), width: sim.food.cols * sim.food.cellSize, height: sim.food.rows * sim.food.cellSize }
+          : null,
+        plants: sim.foodEnabled && sim.plantsEnabled
+          ? { plants: sim.plants.plants, reach: (plant) => sim.plants.reach(plant), color: this.plantColor }
           : null,
         obstacles: sim.obstacles.polylines,
         currents: sim.currents.polylines,

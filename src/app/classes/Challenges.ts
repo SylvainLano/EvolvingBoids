@@ -8,6 +8,7 @@ export type ChallengeState = 'running' | 'won' | 'lost';
 const SETTINGS = [
   'simulationMode', 'numberOfBoids', 'numberOfPredators', 'predatorReproductionChances', 'predatorStarvationModificator',
   'fertileAreas', 'foodEnabled', 'seasonsEnabled', 'yearDuration', 'winterFood', 'pauseSimulation',
+  'plantsEnabled', 'summerAreas', 'starvationThreshold', 'preyPerPredator', 'boidReproductionChances',
 ] as const;
 type ChallengeSettings = Partial<Pick<Simulation, typeof SETTINGS[number]>>;
 
@@ -29,6 +30,11 @@ export function clock(seconds: number): string {
   const whole = Math.floor(seconds);
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
+
+// The rules of the simulation the challenges were balanced with: they stay the same when the simulation gets new features
+const BALANCED_RULES = {
+  plantsEnabled: false, summerAreas: 0, starvationThreshold: 1000, preyPerPredator: 0, boidReproductionChances: 30,
+} as const;
 
 const livingBoids = (sim: Simulation) => sim.boids.filter(boid => !boid.isDead).length;
 const livingPredators = (sim: Simulation) => sim.predators.filter(predator => !predator.isDead && !predator.isSuper).length;
@@ -53,6 +59,7 @@ export const CHALLENGES: Challenge[] = [
     goal: 'Keep both species alive for 10 minutes, without any reinforcement.',
     hint: 'The predators boom, eat the flocks, then starve: cull them with the eraser, shelter the boids, and use your 3 predators wisely.',
     settings: {
+      ...BALANCED_RULES,
       simulationMode: 'Continued', numberOfBoids: 120, numberOfPredators: 6, predatorReproductionChances: 20, predatorStarvationModificator: 5,
       fertileAreas: 3, foodEnabled: true, seasonsEnabled: false,
     },
@@ -69,7 +76,7 @@ export const CHALLENGES: Challenge[] = [
     title: 'Fortress',
     goal: 'A Super Predator arrives every 15 seconds: keep at least 40 boids alive for 3 minutes.',
     hint: 'Super Predators can\'t cross the walls either: build a fortress, and lure them away with the currents.',
-    settings: { simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 0, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
+    settings: { ...BALANCED_RULES, simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 0, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['obstacle', 'current', 'food'],
     // A Super Predator enters from a random border at 5 seconds, then every 15 seconds
     update: (sim, seconds, memory) => {
@@ -94,6 +101,7 @@ export const CHALLENGES: Challenge[] = [
     goal: 'Keep a single predator, that can\'t reproduce, alive for 4 minutes.',
     hint: 'It starves if it doesn\'t eat: bring the flocks to it with the currents, pen them with walls, and drop your 10 boids when it is hungry.',
     settings: {
+      ...BALANCED_RULES,
       simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 1, predatorReproductionChances: 0, predatorStarvationModificator: 6,
       fertileAreas: 2, foodEnabled: true, seasonsEnabled: false,
     },
@@ -114,7 +122,7 @@ export const CHALLENGES: Challenge[] = [
     title: 'Arms Race',
     goal: 'Bring the average speed of the boids to +10 % within 20 minutes.',
     hint: 'Only the fast ones escape a strong predation: keep many predators hunting, and speed up the time.',
-    settings: { simulationMode: 'Infinite', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
+    settings: { ...BALANCED_RULES, simulationMode: 'Infinite', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['predator', 'superPredator', 'obstacle', 'current', 'food'],
     evaluate: reach(1200, sim => boidSpeed(sim) >= 10),
     progress: (sim, seconds) => ({
@@ -127,7 +135,7 @@ export const CHALLENGES: Challenge[] = [
     title: 'Slow and Steady',
     goal: 'Bring the average speed of the boids to -6 % within 20 minutes.',
     hint: 'Natural selection alone is slow here: be a breeder, the size shows the speed, and the eraser removes the smallest ones, the fastest.',
-    settings: { simulationMode: 'Continued', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
+    settings: { ...BALANCED_RULES, simulationMode: 'Continued', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['eraser', 'obstacle', 'current', 'food'],
     evaluate: (sim, seconds) => livingBoids(sim) === 0 ? 'lost' : reach(1200, s => boidSpeed(s) <= -6)(sim, seconds),
     progress: (sim, seconds) => ({
@@ -141,6 +149,7 @@ export const CHALLENGES: Challenge[] = [
     goal: 'Harsh winters are coming: keep at least 20 boids alive until the end of the third winter, without any reinforcement.',
     hint: 'In winter the plankton nearly vanishes: sow food where the flocks are, and keep the predators away from them with walls.',
     settings: {
+      ...BALANCED_RULES,
       simulationMode: 'Continued', numberOfBoids: 120, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 2, foodEnabled: true,
       seasonsEnabled: true, yearDuration: 6, winterFood: 5,
     },

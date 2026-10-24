@@ -11,6 +11,7 @@ export interface StatsSample {
   predatorFertility: number;
   boidVision: number;           // only the boids have the vision gene
   food: number;                 // plankton compared to what the fertile areas can hold, in percent, NaN without plankton
+  plants: number;               // number of algae, NaN without them
   winter: boolean;              // drawn as a band behind the charts
 }
 
@@ -37,7 +38,7 @@ export class Statistics {
   // Called at each simulation step, records a sample at regular intervals
   // The food ratio is only computed when a sample is recorded
   step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults, foodRatio: () => number,
-    winter: boolean) {
+    winter: boolean, plants: number) {
     if (++this.stepsSinceSample < this.sampleInterval && this.samples.length > 0) {
       return;
     }
@@ -57,6 +58,7 @@ export class Statistics {
       predatorFertility: predatorGenes.fertility,
       boidVision: boidGenes.vision,
       food: foodRatio() * 100,
+      plants,
       winter,
     });
     if (this.samples.length > this.maxSamples) {

@@ -47,6 +47,7 @@ export class ChartRenderer {
     const boidColor = darkMode ? '#8c8cff' : 'blue';
     const predatorColor = darkMode ? '#ff9b96' : 'red';
     const foodColor = darkMode ? '#2dd4bf' : '#22a05a';
+    const plantColor = darkMode ? '#86efac' : '#15803d';
     const textColor = darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
     const gridColor = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)';
     const winterColor = darkMode ? 'rgba(148, 197, 255, 0.1)' : 'rgba(30, 64, 175, 0.07)';
@@ -61,6 +62,7 @@ export class ChartRenderer {
           { label: 'Boids', values: samples.map(s => s.boids), color: boidColor, unit: '' },
           { label: 'Predators', values: samples.map(s => s.predators), color: predatorColor, unit: '' },
           { label: 'Food', values: samples.map(s => s.food), color: foodColor, unit: '%' },
+          { label: 'Plants', values: samples.map(s => s.plants), color: plantColor, unit: '' },
         ],
       },
       {

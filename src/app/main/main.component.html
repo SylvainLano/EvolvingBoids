@@ -55,6 +55,7 @@
         <div class="challenge-card" [ngClass]="darkMode ? 'challenge-card-dark' : 'challenge-card-light'">
             <div class="challenge-title">{{ challenges.active.title }}</div>
             <div class="challenge-goal">{{ challenges.active.goal }}</div>
+            <div class="challenge-hint">{{ challenges.active.hint }}</div>
             <div class="challenge-bar">
                 <div class="challenge-bar-fill" [style.width.%]="challenges.progress.ratio * 100"
                     [class.challenge-won]="challenges.state === 'won'" [class.challenge-lost]="challenges.state === 'lost'"></div>

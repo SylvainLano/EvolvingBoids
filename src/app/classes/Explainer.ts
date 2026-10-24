@@ -186,8 +186,8 @@ export class Explainer {
     if (sim.seasonsEnabled && sim.foodEnabled && seasonStarted && (season.name === 'Winter' || season.name === 'Spring')) {
       const center = this.richestPlankton(sim) ?? { x: sim.width / 2, y: sim.height / 2 };
       candidates.push(season.name === 'Winter'
-        ? { id: 'winter', anchor: { center, radius: 70 }, text: 'Winter: the plankton grows back slowly and the fertile areas shrink. The enduring boids survive best: the big and slow ones, with short sight.' }
-        : { id: 'spring', anchor: { center, radius: 70 }, text: 'Spring: the plankton blooms again and the flocks grow back. Food is plenty, so speed and good eyes are worth what they cost.' });
+        ? { id: 'winter', anchor: { center, radius: 70 }, text: 'Winter: the plankton grows back slowly, the fertile areas shrink and the algae wither. The enduring boids survive best: the big and slow ones, with short sight.' }
+        : { id: 'spring', anchor: { center, radius: 70 }, text: 'Spring: the plankton blooms again, new algae sprout, and the flocks grow back. Food is plenty, so speed and good eyes are worth what they cost.' });
     }
 
     // A flock: the boids around one of them
@@ -213,6 +213,14 @@ export class Explainer {
     const plankton = sim.foodEnabled ? this.richestPlankton(sim) : null;
     if (plankton !== null) {
       candidates.push({ id: 'grazing', anchor: { center: plankton, radius: 70 }, text: 'This glowing mist is plankton: the boids eat it to get the energy to nest. The fertile areas slowly drift, and the flocks follow them.' });
+    }
+
+    // A grown alga, far enough from the borders for its circle to be seen
+    const alga = sim.foodEnabled && sim.plantsEnabled
+      ? sim.plants.plants.find(plant => plant.biomass > 1 && plant.x > 90 && plant.x < sim.width - 90 && plant.y > 90 && plant.y < sim.height - 90)
+      : undefined;
+    if (alga) {
+      candidates.push({ id: 'plants', anchor: { center: { x: alga.x, y: alga.y }, radius: sim.plants.radius(alga) + 15 }, text: 'These algae grow in place, and the boids nibble them when they are hungry. They sow their seeds in summer, wither in winter, and may disappear before new ones sprout in spring.' });
     }
 
     // A boid of a lineage whose color drifted away from the first boids

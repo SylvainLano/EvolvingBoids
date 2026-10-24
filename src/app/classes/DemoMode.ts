@@ -41,7 +41,7 @@ const SCENES: DemoScene[] = [
 // Settings changed by the demo, restored when it stops: some of the display, some of the simulation
 const SAVED_VIEW = ['darkMode', 'glow', 'drawQuadtree', 'renderer', 'timeScale'] as const;
 const SAVED_SIMULATION = [
-  'simulationMode', 'lowFPSAction', 'pauseSimulation', 'seasonsEnabled', 'boidReproductionChances', 'predatorReproductionChances',
+  'simulationMode', 'lowFPSAction', 'pauseSimulation', 'seasonsEnabled', 'plantsEnabled', 'boidReproductionChances', 'predatorReproductionChances',
   'alignmentRadius', 'cohesionRadius', 'boidsSeparationRadius', 'fleeRadius', 'fleeFactor', 'predatorsSeparationRadius', 'trailLength',
 ] as const;
 type SavedView = Partial<Pick<MainComponent, typeof SAVED_VIEW[number]>>;
@@ -92,7 +92,7 @@ export class DemoMode {
     this.savedView = Object.fromEntries(SAVED_VIEW.map(key => [key, this.app[key]])) as SavedView;
     this.savedSimulation = Object.fromEntries(SAVED_SIMULATION.map(key => [key, this.sim[key]])) as SavedSimulation;
     Object.assign(this.app, { darkMode: true, glow: true, drawQuadtree: false, renderer: 'canvas', timeScale: 1 });
-    Object.assign(this.sim, { simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false, seasonsEnabled: true });
+    Object.assign(this.sim, { simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false, seasonsEnabled: true, plantsEnabled: true });
     this.sim.mousePosition = null;
 
     const now = performance.now();

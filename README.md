@@ -13,7 +13,7 @@
 
 ### The Plankton
 - Regular Boids eat plankton, drawn as a glowing mist, that grows in fertile areas slowly drifting across the screen: the flocks graze and migrate to follow it  
-- The number of fertile areas (3 by default) can be modified in the Boids Options: with a single one, the food gets scarce  
+- There is a single fertile area by default, and a second one in summer with the seasons: the number can be modified in the Boids Options  
 - Boids are drawn to the plankton, all the more when hungry: with 3 fertile areas, they stay about 3 times more in them than by chance  
 - A grazed area grows back like grass, the plankton left behind by a drifting area fades away  
 - Boids spend energy to live, and much more to swim fast (with the square of the speed), they look for food when hungry and starve without energy  
@@ -24,17 +24,25 @@
 - A year lasts 8 simulated minutes (4 to 20 in the Boids Options), from spring to winter. The simulation starts at the end of spring, when the plankton is nearly at its best  
 - In winter the fertile areas hold much less plankton, 20 % of the summer by default ("Winter plankton %"), and the mist turns icy blue: the births stop, and the boids that spend too much energy starve  
 - The season and the year are shown under the counters, the winters are shaded behind the charts  
-- With the defaults, a winter takes a flock of 80 to 100 boids down to 35 to 50, a few of them starve, and the reinforcements of the Infinite mode are seldom needed (measured over 3 years)  
+- With the defaults, the flocks grow to about a hundred boids in summer and autumn, and fall back to about 30 in winter, where the Infinite mode tops them up with a few newcomers (measured over 3 years)  
 - The seasons can be switched off in the Boids Options. The demo always has them, the challenges balanced before them don't  
 
+### The Algae
+- Algae grow in place on the sea floor, drawn as small trees without leaves, growing up and forking diagonally now and then, taller with the food they hold, and the hungry boids nibble them: a flock can settle on a meadow of algae, or follow the drifting plankton  
+- The sea starts with 4 algae. In spring and summer they grow, and the grown ones sow their seeds around them, so they spread into meadows (up to 1 alga per 25000 px²)  
+- In autumn they turn yellow, in winter they turn brown, shrink and may disappear. When fewer than 4 are left, new ones sprout in spring  
+- A large flock can graze a meadow down to nothing, it grows back from the seeds of the others  
+- The Plant tool adds an alga with a click, the Eraser pulls them out. They can be switched off in the Boids Options  
+
 ### The Mouse Tools
-- A tool bar, or the keys 1 to 7, selects what the mouse does  
+- A tool bar, or the keys 1 to 8, selects what the mouse does  
 - Boid, Predator: a click adds one, and the mouse scares the boids like a predator  
 - Super Predator: a click adds a golden predator, bigger and faster, that hunts boids and predators for 45 seconds then fades away. Predators flee it. It doesn't reproduce nor evolve, and isn't counted in the statistics  
 - Obstacle: a drag draws a wall that can't be crossed, boids and predators steer away from it and keep a small distance while following it. Predators don't chase the boids hidden behind a wall  
 - Current: a drag draws a current that carries the boids along, faster than they swim, and slowly turns them in its direction  
-- Eraser: holding the mouse removes the boids, and the parts of the obstacles, currents and plankton, under it  
+- Eraser: holding the mouse removes the boids, the algae, and the parts of the obstacles, currents and plankton, under it  
 - Food: holding the mouse sows plankton, it fades away out of the fertile areas  
+- Plant: a click plants an alga, if there is room for it  
 - Obstacles and currents stay when the simulation restarts, the Clear button removes them  
 
 ### On a Phone or a Tablet
@@ -58,7 +66,7 @@
 ### The Explain Mode
 - The Explain button, at the top next to the tools, or the E key, shows short bubbles about what happens on the screen, when it happens. On the first visit, the button glows and pulses to catch the eye  
 - A bubble stands still next to what it explains, circled in amber: the boid an event happened to, or an area of the screen (a flock, the plankton, a wall). It stands on the side of the center of the screen, so no edge cuts it  
-- It starts with how a flock works, then explains the births, the mutants, the captures, the predators giving up a chase, the deaths of old age and of hunger, the reinforcements, the Super Predators, the round generations, the fleeing flocks, the plankton, the arrival of the winter and of the spring, the colors of the lineages, the size, the vision, the walls and the charts  
+- It starts with how a flock works, then explains the births, the mutants, the captures, the predators giving up a chase, the deaths of old age and of hunger, the reinforcements, the Super Predators, the round generations, the fleeing flocks, the plankton, the algae, the arrival of the winter and of the spring, the colors of the lineages, the size, the vision, the walls and the charts  
 - One bubble at a time, long enough to read it calmly (a bar shows the time left), a click on the bubble or the Enter key shows the next one. Every explanation is shown once, then comes back now and then  
 
 ### The Challenges
@@ -69,13 +77,14 @@
   - Arms Race: bring the average speed of the boids to +10 % within 20 minutes  
   - Slow and Steady: bring the average speed of the boids to -6 % within 20 minutes  
   - Three Winters: keep at least 20 boids alive until the end of the third harsh winter, without reinforcement (6 minutes years, 2 fertile areas, 5 % of plankton in winter)  
-- The challenges made before the seasons are played without them, so they keep the balance they were checked with  
+- Each challenge keeps the rules it was balanced with: the challenges made before the seasons are played without them, and none of them has algae, the summer fertile area, nor the new balance of the predators  
+- The menu shows one line per challenge, a click unfolds its goal and its Start button. The hint is shown in the card of the running challenge  
 - The time is the simulated time, so the speed can be raised. A card shows the goal and the progress, the simulation pauses when the challenge is won or lost  
 - The settings of the user are restored when the challenge is closed, and the completed challenges are remembered in the browser  
 - Each challenge was checked by simulation: lost without any action, won with a simple strategy  
 
 ### The Charts and the Speed
-- Live charts show the populations, the plankton (compared to what the fertile areas can hold), the average speed and fertility of each species and the average vision of the boids, compared to their defaults, over the last 15 simulated minutes, with the winters shaded  
+- Live charts show the populations, the plankton (compared to what the fertile areas can hold), the number of algae, the average speed and fertility of each species and the average vision of the boids, compared to their defaults, over the last 15 simulated minutes, with the winters shaded  
 - The highest generation of each species is displayed with the boid counts  
 - A ring spreads around each newborn mutant  
 - Holding Shift and hovering a boid shows its generation, genes (with its endurance, and how far it sees, also drawn as a dashed circle), and age (or hunger for a Predator), the mouse then doesn't scare the boids. When the mouse stops, the card stands still to be read and its boid stays circled, until the mouse moves or Shift is released  
@@ -86,7 +95,7 @@
 - The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
 - Scenes (Shoal, Murmuration, Fireflies, Night Hunt) follow each other every 2.5 minutes, with a smooth transition of the parameters  
 - A director keeps the ecosystem alive: new flocks and predator packs arrive from the borders when a population is low, with the genes of the current population, and reproduction stops when a population is too large or the FPS too low  
-- The seasons are always on during the demo  
+- The seasons and the algae are always on during the demo  
 - Moving the mouse, or a click, shows how to exit: D, Esc, or a second click (a second tap on a phone)  
 
 ### The Quadtree
@@ -101,7 +110,7 @@
 - Regular Boids need a partner to reproduce, heading roughly the same way, and both should have had some quiet time with no fleeing  
 - Regular Boids reproduce less as the screen gets crowded (logistic growth), and stop at 1 boid per 4000 px²  
 - Regular Boids die of old age after about 3 minutes (+/- 20 %), the lifespan can be modified in the options, 0 makes them immortal  
-- Predators only need to eat to reproduce, but must calm down after eating  
+- Predators only need to eat to reproduce, but must calm down after eating. After a meal, a predator has 20 % of chances to breed, only when there are at least 25 boids per predator: they neither swarm nor die out (0 to 3 extinctions in 24 minutes, against about 25 before), and a predator starves about 20 seconds after its last meal  
 - All Boids carry a Genome with a Maximum Velocity, a Reproduction Rate and a Lineage (the color of the family), and Regular Boids a Vision, all altered by evolution  
 - All Boids have a Reproduction Chance, an Evolution Chance and an Evolution Cap that can be modified in the options  
 
@@ -128,7 +137,7 @@
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection. `options/options.component.ts` is the panel of the counters and of the options, the ranges of its sliders come from `classes/Settings.ts`  
 - `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation, `classes/Settings.ts` remembers the settings and writes or reads the shared links  
-- `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton  
+- `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton, `classes/Plants.ts` grows the algae  
 - `src/favicon.svg` is the icon, also drawn as `favicon.ico` (16, 32 and 48 px) and `apple-touch-icon.png` (180 px). `src/assets/preview.png` is the picture of the link previews, a capture of the demo at 1200 x 630 px, declared with absolute addresses in `index.html`  
 - `index.html` also gives the search engines the canonical address (the shared links all lead to it), a description of the application as structured data, and a short presentation for the robots and the visitors without JavaScript  
 
@@ -144,5 +153,4 @@
 - Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator automatically
 - Add a field of view (the line of sight is already blocked by the walls)  
 - Add movement anticipation for predators
-- A gene for the predators (vision, endurance), once their balance is studied: in Infinite mode they die out and come back about once a minute  
-- A single plankton area, or two in summer, and plants that grow and that the Regular Boids can nibble to eat. In winter, the plankton stays scarce, and the plants shrink instead of growing, or even disappear
+- A gene for the predators (vision, endurance), now that they keep a steady population  

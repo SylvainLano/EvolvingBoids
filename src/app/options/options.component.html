@@ -76,19 +76,20 @@
                     <div class="note">Hold Shift and hover a boid to inspect it</div>
                 }
 
+                <!-- One line per challenge, its goal unfolds with a click: the hint is given in the card of the running challenge -->
                 @if (panel === 'Challenges') {
                     @for (challenge of app.challenges.challenges; track challenge.id) {
-                        <div class="challenge">
-                            <div class="challenge-head">
-                                <span class="challenge-name">{{ challenge.title }}</span>
-                                @if (app.challenges.results[challenge.id] !== undefined) {
-                                    <span class="challenge-done" title="Completed, best time in simulated time">&#10003; {{ clock(app.challenges.results[challenge.id]) }}</span>
-                                }
-                                <button type="button" class="action" (click)="app.startChallenge(challenge)">Start</button>
-                            </div>
+                        <button type="button" class="challenge-head" (click)="openChallenge = openChallenge === challenge.id ? null : challenge.id">
+                            <span class="challenge-name">{{ challenge.title }}</span>
+                            @if (app.challenges.results[challenge.id] !== undefined) {
+                                <span class="challenge-done" title="Completed, best time in simulated time">&#10003; {{ clock(app.challenges.results[challenge.id]) }}</span>
+                            }
+                            <span class="section-sign">{{ openChallenge === challenge.id ? '-' : '+' }}</span>
+                        </button>
+                        @if (openChallenge === challenge.id) {
                             <div class="challenge-goal">{{ challenge.goal }}</div>
-                            <div class="challenge-hint">{{ challenge.hint }}</div>
-                        </div>
+                            <button type="button" class="action challenge-start" (click)="app.startChallenge(challenge)">Start</button>
+                        }
                     }
                 }
             </div>

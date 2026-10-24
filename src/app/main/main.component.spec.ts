@@ -46,6 +46,14 @@ describe('MainComponent', () => {
     expect(component.tool).toBe('food');
   });
 
+  it('should plant an alga with a click of the Plant tool, the key 8', () => {
+    component.handleKeyDown(new KeyboardEvent('keydown', { key: '8' }));
+    expect(component.tool).toBe('plant');
+    component.sim.plants.plants = [];
+    component.handleMouseClick(new MouseEvent('click', { clientX: component.sim.width / 2, clientY: component.sim.height / 2 }));
+    expect(component.sim.plants.plants.length).toBe(1);
+  });
+
   it('should let the mouse scare the boids only with the tools adding creatures', () => {
     component.selectTool('predator');
     component.handleMouseMove(new MouseEvent('mousemove', { clientX: 100, clientY: 100 }));
@@ -133,16 +141,16 @@ describe('MainComponent', () => {
 
   it('should remember the settings for the next visit, until they are reset', () => {
     component.darkMode = false;
-    component.sim.fertileAreas = 1;
+    component.sim.fertileAreas = 4;
     component.settings.save();
     fixture.destroy();
     const next = TestBed.createComponent(MainComponent);
     next.detectChanges();
     expect(next.componentInstance.darkMode).toBe(false);
-    expect(next.componentInstance.sim.fertileAreas).toBe(1);
+    expect(next.componentInstance.sim.fertileAreas).toBe(4);
     next.componentInstance.settings.reset();
     expect(next.componentInstance.darkMode).toBe(true);
-    expect(next.componentInstance.sim.fertileAreas).toBe(3);
+    expect(next.componentInstance.sim.fertileAreas).toBe(1);
     next.destroy();
   });
 

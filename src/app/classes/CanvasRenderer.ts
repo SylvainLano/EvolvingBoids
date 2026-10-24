@@ -1,5 +1,6 @@
 // CanvasRenderer.ts
 import type { Boid, Point } from './Boid';
+import type { Plant } from './Plants';
 import type { Quadtree } from './Quadtree';
 import { boidColor } from './BoidColor';
 
@@ -18,6 +19,7 @@ export interface RenderOptions {
 // What the user drew with the mouse tools
 export interface WorldDrawing {
   food: { texture: HTMLCanvasElement, width: number, height: number } | null;   // one pixel per cell, scaled up
+  plants: { plants: Plant[], reach: (plant: Plant) => number, color: string } | null;   // how far each one has grown, the color of the season
   obstacles: Point[][];
   currents: Point[][];
   currentWidth: number;                                                     // width of the band carrying the boids
@@ -36,6 +38,7 @@ export class CanvasRenderer {
   readonly mutantHaloDuration = 1200;         // in ms
   private readonly mutantHaloRadius = 30;
   private readonly currentDashSpeed = 0.03;   // in px per ms, the dashes of a current flow in its direction
+  private readonly plantWidths = [1.5, 1.1, 0.8];   // in px, of the trunk of a grown alga, of its branches and of theirs
   private haloSprites = new Map<string, HTMLCanvasElement>();
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -80,6 +83,13 @@ export class CanvasRenderer {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(world.food.texture, 0, 0, world.food.width, world.food.height);
+    }
+
+    // The algae grow on the sea floor, under everything else
+    if (world.plants !== null) {
+      for (const plant of world.plants.plants) {
+        this.drawPlant(plant, world.plants.reach(plant), world.plants.color);
+      }
     }
 
     // The currents flow under the boids, the obstacles stand among them
@@ -134,6 +144,29 @@ export class CanvasRenderer {
 
   private color(boid: Boid, darkMode: boolean, opacity: number = 1): string {
     return boidColor(boid.isPredator, boid.isDead, boid.genome.lineage, boid.alpha, darkMode, opacity, boid.isSuper);
+  }
+
+  // A small tree, drawn as far as it has grown from its root: the last segment is drawn in part
+  // The trunk is thicker than the branches, and they all get thicker as the alga grows
+  private drawPlant(plant: Plant, reach: number, color: string) {
+    const ctx = this.ctx;
+    const growth = 0.5 + 0.5 * Math.min(1, reach / plant.length);
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    for (let depth = 0; depth < this.plantWidths.length; depth++) {
+      ctx.lineWidth = this.plantWidths[depth] * growth;
+      ctx.beginPath();
+      for (const segment of plant.twig) {
+        if (segment.depth !== depth || segment.from >= reach) {
+          continue;
+        }
+        const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
+        const part = Math.min(1, (reach - segment.from) / length);
+        ctx.moveTo(plant.x + segment.x1, plant.y + segment.y1);
+        ctx.lineTo(plant.x + segment.x1 + (segment.x2 - segment.x1) * part, plant.y + segment.y1 + (segment.y2 - segment.y1) * part);
+      }
+      ctx.stroke();
+    }
   }
 
   // A wall the boids can't cross

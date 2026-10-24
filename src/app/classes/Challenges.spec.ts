@@ -124,4 +124,13 @@ describe('Challenges', () => {
       expect(other.settings.seasonsEnabled).toBe(false);
     }
   });
+
+  it('should keep the rules every challenge was balanced with, whatever the defaults of the simulation', () => {
+    for (const each of CHALLENGES) {
+      expect(each.settings.plantsEnabled).toBe(false);
+      expect(each.settings.starvationThreshold).toBe(1000);
+      expect(each.settings.preyPerPredator).toBe(0);
+      expect(each.settings.boidReproductionChances).toBe(30);
+    }
+  });
 });

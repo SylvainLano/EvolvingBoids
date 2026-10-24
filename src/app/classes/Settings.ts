@@ -37,6 +37,7 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'boidLifespan', owner: 'sim', range: [0, 600] },
   { key: 'geneCostFactor', owner: 'sim', range: [0, 3] },
   { key: 'foodEnabled', owner: 'sim' },
+  { key: 'plantsEnabled', owner: 'sim' },
   { key: 'fertileAreas', owner: 'sim', range: [1, 6] },
   { key: 'seasonsEnabled', owner: 'sim' },
   { key: 'yearDuration', owner: 'sim', range: [4, 20] },

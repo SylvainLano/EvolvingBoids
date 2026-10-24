@@ -3,6 +3,7 @@ import { Quadtree } from './Quadtree';
 import { Boid, Genome, Heritage, Point } from './Boid';
 import { SegmentField } from './SegmentField';
 import { FoodField } from './FoodField';
+import { PlantField } from './Plants';
 import { Statistics } from './Statistics';
 
 export type SimulationMode = 'DeathMatch' | 'Retry' | 'Continued' | 'Infinite';
@@ -29,7 +30,7 @@ export class Simulation {
   boidLifespan = 180;                 // average lifespan in seconds (+/- 20 %), 0 for immortal boids - can be modified by the user
   partnerAngleThreshold = 0.3;        // maximum angle in radians between the directions of two partners
   reproductionRadius = 20;            // radius to find a partner (needed to reproduce for regular Boids only)
-  boidReproductionChances = 30;       // percentage of chances to reproduce - can be modified by the user
+  boidReproductionChances = 40;       // percentage of chances to reproduce - can be modified by the user
   boidEvolutionChances = 5;           // chances for the child to evolve - can be modified by the user
   boidEvolutionStep = 5;              // size of steps of evolution modification in percent
   boidEvolutionCap = 50;              // maximum evolution modification in percent - can be modified by the user
@@ -58,7 +59,11 @@ export class Simulation {
 
   // Plankton
   foodEnabled = true;                 // boids eat plankton: they need energy to reproduce, and starve without it - can be modified by the user
-  fertileAreas = 3;                   // number of drifting areas where the plankton grows - can be modified by the user
+  fertileAreas = 1;                   // number of drifting areas where the plankton grows - can be modified by the user
+  summerAreas = 1;                    // fertile areas added in summer, with the seasons
+  plantsEnabled = true;               // algae grow in place, the boids nibble them - can be modified by the user
+  plants = new PlantField();
+  plantSight = 150;                   // distance at which a hungry boid sees an alga
   foodUpdateInterval = 6;             // simulation steps between two growths of the plankton
   boidBaseMetabolism = 0.0001;        // energy spent per step, even at rest
   boidSwimCost = 0.0002;              // energy spent per step swimming at the default boid speed, it grows with the square of the speed
@@ -82,14 +87,15 @@ export class Simulation {
   predators: Boid[] = [];
   numberOfPredators = 3;              // number of predators created when the simulation starts
   predatorReproductionRate = 300;     // delay before a predator can reproduce again - can be modified by evolution and by the input predatorReproductionModificator
-  predatorReproductionChances = 10;   // percentage of chances to reproduce - can be modified by the user
+  predatorReproductionChances = 20;   // percentage of chances to reproduce after a meal - can be modified by the user
+  preyPerPredator = 25;               // a predator only breeds when there are this many boids per predator: they can't swarm
   predatorEvolutionChances = 5;       // chances for the child to evolve - can be modified by the user
   predatorEvolutionStep = 5;          // size of steps of evolution modification in percent
   predatorEvolutionCap = 50;          // maximum evolution modification in percent - can be modified by the user
   predatorMaxSteeringForce = 0.12;    // maximum force to change direction
   predatorsSeparationRadius = 50;     // radius to move from other boids - can be modified by the user
   predatorMaxVelocity = 2.5;          // maximum velocity of the chasing predator - can be modified by evolution
-  starvationThreshold = 1000;         // delay before a predator starves to death - can be modified by the input predatorStarvationModificator
+  starvationThreshold = 2000;         // delay before a predator starves to death - can be modified by the input predatorStarvationModificator
   captureDistance = 5;                // distance to get to eat a boid
   predatorsCooperativeness = true;    // Do Predator cooperative to chase different preys
   predatorVersatility = true;         // Can predators change prey after choosing one
@@ -153,6 +159,7 @@ export class Simulation {
     this.height = height;
     this.quadtree = new Quadtree( 0, 0, width, height, 24 );
     this.food = new FoodField( width, height, this.fertileAreas );
+    this.plants.initialize(width, height);
     this.stepsSinceFoodUpdate = 0;
     this.stats.clear();
     this.boidGenePool = [];
@@ -220,6 +227,7 @@ export class Simulation {
     this.obstacles.transform(scale);
     this.currents.transform(scale);
     this.food.resize(width, height);
+    this.plants.resize(width, height);
   }
 
   // Where the year is: the integer part counts the years, the decimals go from the spring to the winter
@@ -255,9 +263,12 @@ export class Simulation {
 
     // The plankton grows every few steps, it is enough for its slow pace, and less in winter
     if ( this.foodEnabled && ++this.stepsSinceFoodUpdate >= this.foodUpdateInterval ) {
-      this.food.setPatchCount(this.fertileAreas);
+      this.food.setPatchCount(this.fertileAreas + (this.seasonsEnabled && this.season.name === 'Summer' ? this.summerAreas : 0));
       this.food.productivity = this.productivity;
       this.food.update(this.stepsSinceFoodUpdate);
+      if ( this.plantsEnabled ) {
+        this.plants.update(this.stepsSinceFoodUpdate, this.productivity);
+      }
       this.stepsSinceFoodUpdate = 0;
     }
 
@@ -269,11 +280,16 @@ export class Simulation {
       { maxVelocity: this.boidMaxVelocity, reproductionRate: this.boidReproductionRate },
       { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
       () => this.foodEnabled ? this.food.fillRatio() : NaN,
-      this.seasonsEnabled && this.season.name === 'Winter'
+      this.seasonsEnabled && this.season.name === 'Winter',
+      this.foodEnabled && this.plantsEnabled ? this.plants.plants.length : NaN
     );
 
     // Boids behavior rules
     for (const boid of [...this.boids, ...this.predators]) {
+      // Eaten earlier during this step: it is not in the simulation anymore
+      if ( this.isGone(boid) ) {
+        continue;
+      }
 
       // Avoid borders: Redirect away from the borders
       const avoidBorders = this.avoidBorders(boid);
@@ -288,6 +304,10 @@ export class Simulation {
 
       if ( boid.isDead ) {
         this.fadeAway(boid);
+        // Faded away and out of the Quadtree: a move would put it back in
+        if ( this.isGone(boid) ) {
+          continue;
+        }
       } else if ( !boid.isPredator ) {
         this.moveBoid(boid, avoidBorders);
       } else if ( boid.isSuper ) {
@@ -330,6 +350,11 @@ export class Simulation {
     if ( cause !== undefined ) {
       this.onEvent({ type: cause, boid });
     }
+  }
+
+  // Faded away, eaten or removed: out of the lists and of the Quadtree
+  private isGone(boid: Boid): boolean {
+    return boid.isDead && boid.alpha <= 0.01;
   }
 
   // A dead boid slows down and fades away, then it is removed
@@ -409,6 +434,19 @@ export class Simulation {
       const gradient = this.food.gradient(boid.position);
       seekFood.x = gradient.x * attraction;
       seekFood.y = gradient.y * attraction;
+
+      // The closest alga in sight is nibbled when the boid is on it, or sought, all the more when hungry
+      const plant = this.plantsEnabled ? this.plants.closest(boid.position, this.plantSight) : null;
+      if ( plant !== null ) {
+        const toPlant = { x: plant.x - boid.position.x, y: plant.y - boid.position.y };
+        const distance = Math.sqrt(toPlant.x ** 2 + toPlant.y ** 2);
+        if ( distance <= this.plants.radius(plant) ) {
+          boid.energy += this.plants.eat(plant, Math.min(this.eatQuantity, 1 - boid.energy));
+        } else {
+          seekFood.x += toPlant.x / distance * attraction;
+          seekFood.y += toPlant.y / distance * attraction;
+        }
+      }
     }
 
     let velocityChangeX = (separation.x + alignment.x + cohesion.x + avoidBorders.x + fleePredators.x * this.fleeFactor + avoidObstacles.x * this.obstacleAvoidanceForce + seekFood.x);
@@ -481,7 +519,7 @@ export class Simulation {
           if ( this.calculateDistanceSquared(boid.position, closestBoidPosition) < this.captureDistance**2 ) {
             this.devour(closestBoid, boid);
 
-            if ( Math.random() <= this.predatorReproductionChances/100 ) {
+            if ( Math.random() <= this.predatorReproductionChances/100 && this.totalBoids >= this.preyPerPredator * this.totalPredators ) {
               this.giveBirth ( boid );
             }
 
@@ -693,6 +731,8 @@ export class Simulation {
       this.kill(target);
     } else {
       target.quadtree.remove(target);
+      target.isDead = true;
+      target.alpha = 0;
       this.boids = this.boids.filter(other => other !== target);
       this.rememberGenes(target);
     }
@@ -1074,6 +1114,7 @@ export class Simulation {
     this.obstacles.erase(center, radius);
     this.currents.erase(center, radius);
     this.food.erase(center, radius);
+    this.plants.erase(center, radius);
   }
 
   clearDrawings() {
@@ -1098,6 +1139,8 @@ export class Simulation {
     for (let i = 0; i < numberToRemove && listOfBoids.length > 0; i++) {
       const boidToRemove = listOfBoids.shift()!;
       boidToRemove.quadtree.remove(boidToRemove);
+      boidToRemove.isDead = true;
+      boidToRemove.alpha = 0;
       if ( !boidToRemove.isSuper ) {
         this.rememberGenes(boidToRemove);
       }

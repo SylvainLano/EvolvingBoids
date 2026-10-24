@@ -33,6 +33,7 @@ const heading = (label: string): Control => ({ kind: 'heading', label });
 export class OptionsComponent {
   @Input({ required: true }) app!: MainComponent;
   readonly clock = clock;
+  openChallenge: string | null = null;      // the challenge whose goal is shown
 
   readonly titles: Record<OptionsPanel, string> = {
     Simulation: 'Simulation', Display: 'Display', Boids: 'Boids', Predator: 'Predators', Challenges: 'Challenges',
@@ -85,8 +86,9 @@ export class OptionsComponent {
       slider('boidLifespan', 'Lifespan', 30, ' s', 'Average age at which a boid dies, +/- 20 %. 0 makes the boids immortal.'),
       slider('boidReproductionChances', 'Reproduction chances', 5, ' %'),
       slider('boidReproductionModificator', 'Reproduction modifier', 1),
-      heading('Plankton and seasons'),
+      heading('Food and seasons'),
       toggle('foodEnabled', 'Plankton', 'Boids eat plankton, growing in drifting fertile areas: they need energy to reproduce, and starve without it.'),
+      toggle('plantsEnabled', 'Plants', 'Algae grow in place, the boids nibble them: they spread in summer, wither in winter and sprout again in spring.'),
       slider('fertileAreas', 'Fertile areas', 1, '', 'Number of drifting areas where the plankton grows: fewer areas make the food scarcer.'),
       toggle('seasonsEnabled', 'Seasons', 'The plankton thrives in summer and fades in winter: the enduring boids get through.'),
       slider('yearDuration', 'Year length', 2, ' min', 'Length of a year, in simulated minutes.'),

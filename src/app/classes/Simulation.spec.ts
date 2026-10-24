@@ -86,6 +86,46 @@ describe('Simulation', () => {
     expect(predator.preyLink).toBe(visible);
   });
 
+  it('should only let a predator breed when there are enough boids for each predator', () => {
+    const breeds = (boids: number) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      sim.predatorReproductionChances = 100;
+      const predator = addBoid(sim, 300, 300, 0, 0, true);
+      addBoid(sim, 302, 300);
+      for (let i = 1; i < boids; i++) {
+        addBoid(sim, 700, 50 + (i % 25) * 20);
+      }
+      sim.step();
+      return sim.predators.filter(p => p !== predator).length;
+    };
+    expect(breeds(10)).toBe(0);
+    expect(breeds(30)).toBe(1);
+  });
+
+  it('should add a fertile area in summer', () => {
+    const sim = emptySimulation();
+    const at = (yearProgress: number) => {
+      sim.elapsedSteps = Math.round((yearProgress - sim.yearStart) * sim.yearDuration * 60 * sim.stepsPerSecond);
+      steps(sim, sim.foodUpdateInterval);
+      return sim.food.patchCount;
+    };
+    expect(at(0.4)).toBe(sim.fertileAreas + sim.summerAreas);
+    expect(at(0.9)).toBe(sim.fertileAreas);
+  });
+
+  it('should let a hungry boid nibble an alga', () => {
+    const sim = emptySimulation();
+    sim.food.erase({ x: 300, y: 300 }, 200);
+    sim.plants.plants = [];
+    const plant = sim.plants.add({ x: 300, y: 300 })!;
+    const boid = addBoid(sim, 300, 300);
+    boid.energy = 0.5;
+    sim.step();
+    expect(boid.energy).toBeGreaterThan(0.5);
+    expect(plant.biomass).toBeLessThan(sim.plants.sproutBiomass);
+  });
+
   it('should let a predator give up a chase that makes no progress, and chase another prey', () => {
     const sim = emptySimulation();
     sim.foodEnabled = false;
@@ -291,6 +331,19 @@ describe('Simulation', () => {
     events.length = 0;
     sim.erase({ x: 100, y: 100 }, 30);
     expect(events).toContain('erased');
+  });
+
+  it('should take an eaten boid out of the simulation for good, the Quadtree included', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    addBoid(sim, 300, 300, 0, 0, true);
+    const prey = addBoid(sim, 302, 300, 3, 0);
+    sim.step();
+    sim.step();
+    expect(prey.isDead).toBe(true);
+    expect(sim.boids).not.toContain(prey);
+    const inQuadtree = sim.quadtree.retrieveFinalQuadtrees().flatMap(leaf => leaf.entities);
+    expect(inQuadtree).not.toContain(prey);
   });
 
   it('should tell which predator caught which prey', () => {
