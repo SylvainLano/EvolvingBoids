@@ -203,8 +203,8 @@ export class FoodField {
   }
 
   // A small image with one pixel per cell, drawn scaled up and smoothed it looks like a glowing mist
-  // It turns from green blue in summer to an icy blue in winter
-  texture(darkMode: boolean): HTMLCanvasElement {
+  // It turns from green blue in summer to an icy blue in winter, unless an ambiance gives it its own color
+  texture(darkMode: boolean, tint: { color: [number, number, number], alpha: number } | null = null): HTMLCanvasElement {
     if (this.image === null || this.imageData === null) {
       this.image = document.createElement('canvas');
       this.image.width = this.cols;
@@ -213,8 +213,8 @@ export class FoodField {
     }
     const cold = Math.min(1, Math.max(0, (1 - this.productivity) / 0.7));
     const mix = (summer: number, winter: number) => summer + (winter - summer) * cold;
-    const [red, green, blue, maxAlpha] = darkMode
-      ? [mix(45, 165), mix(212, 205), mix(191, 245), 0.32]
+    const [red, green, blue, maxAlpha] = tint !== null ? [...tint.color, tint.alpha]
+      : darkMode ? [mix(45, 165), mix(212, 205), mix(191, 245), 0.32]
       : [mix(34, 70), mix(160, 130), mix(90, 200), 0.28];
     const data = this.imageData.data;
     for (let i = 0; i < this.food.length; i++) {

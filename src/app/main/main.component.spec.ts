@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { MainComponent } from './main.component';
 import { UserSettings, encodeLines, parseLink } from '../classes/Settings';
+import { AMBIANCES } from '../classes/Ambiance';
 
 describe('MainComponent', () => {
   let component: MainComponent;
@@ -115,15 +116,61 @@ describe('MainComponent', () => {
     expect(component.sim.predators.length).toBe(predators);
   });
 
-  it('should restore the settings when the demo stops', () => {
+  it('should play the cinema mode in the ambiance of its scene, then restore the settings when it stops', () => {
     component.darkMode = false;
     component.drawQuadtree = true;
     component.demo.start(false);
-    expect(component.darkMode).toBe(true);
     expect(component.drawQuadtree).toBe(false);
+    expect(component.longTrails).toBe(true);
+    expect(component.ambiance).not.toBe('classic');
+    expect(component.darkMode).toBe(AMBIANCES[component.ambiance].dark);
+    expect(component.boidShape).toBe(AMBIANCES[component.ambiance].shape);
     component.demo.stop();
     expect(component.darkMode).toBe(false);
     expect(component.drawQuadtree).toBe(true);
+    expect(component.ambiance).toBe('classic');
+    expect(component.longTrails).toBe(false);
+  });
+
+  it('should film the cinema mode in smooth shots, showing little beyond the world, and fade to black between two scenes', () => {
+    component.demo.start(false);
+    const start = performance.now();
+    component.demo.update(start);
+    expect(component.demo.fade).toBeGreaterThan(0.9);
+    const camera = component.demo.camera;
+    const zooms = new Set<number>();
+    let previous = { ...camera };
+    for (let elapsed = 100; elapsed <= 60000; elapsed += 100) {
+      component.demo.update(start + elapsed);
+      zooms.add(Math.round(camera.zoom * 10) / 10);
+      // Never a jump: at most a few dozen pixels on the screen in a tenth of a second
+      expect(Math.hypot(camera.x - previous.x, camera.y - previous.y) * camera.zoom).toBeLessThan(60);
+      const margin = (1 - component.demo.borderMargin) * component.sim.width / 2 / camera.zoom;
+      expect(camera.x).toBeGreaterThan(margin - 5);
+      expect(camera.x).toBeLessThan(component.sim.width - margin + 5);
+      previous = { ...camera };
+    }
+    // A wide shot without zoom, then closer ones
+    expect(zooms.has(1)).toBe(true);
+    expect(Math.max(...zooms)).toBeGreaterThan(1.5);
+    component.demo.update(start + component.demo.sceneDuration - 500);
+    expect(component.demo.fade).toBeGreaterThan(0.5);
+    component.demo.stop();
+  });
+
+  it('should give an ambiance the dark mode that suits it, the dark mode of the user coming after it in the settings', () => {
+    component.ambiance = 'paper';
+    expect(component.darkMode).toBe(false);
+    component.ambiance = 'neon';
+    expect(component.darkMode).toBe(true);
+    component.darkMode = false;
+    component.settings.save();
+    fixture.destroy();
+    const next = TestBed.createComponent(MainComponent);
+    next.detectChanges();
+    expect(next.componentInstance.ambiance).toBe('neon');
+    expect(next.componentInstance.darkMode).toBe(false);
+    next.destroy();
   });
 
   it('should draw a wall with a finger, and forget the finger once lifted', () => {

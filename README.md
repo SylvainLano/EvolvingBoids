@@ -7,7 +7,16 @@
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
 - Angular runs without zone.js: the animation loop refreshes the view itself, the counters 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
-- Their shape is chosen in the Display Options: arrow heads, fish waving their tails (sharks for the predators), birds flapping their wings (hawks for the predators), or the letter of their family (lowercase boids, uppercase predators, a mutant gets the next or the previous letter)  
+- Their shape is chosen in the Display Options: arrow heads, fish waving their tails (sharks for the predators), birds flapping their wings (hawks for the predators), the letter of their family (lowercase boids, uppercase predators, a mutant gets the next or the previous letter), or glowing comets  
+- The Ambiance of the Display Options gives the world its background, the colors of the families, of the plankton and of the algae, and the dark mode that suits it:
+  - Classic: the usual sea, dark or light  
+  - Abyss: bioluminescent fish in the deep sea, under swaying light shafts and falling marine snow  
+  - Sunset: dark birds against a sunset sky, like a murmuration of starlings, without glow  
+  - Aurora: glowing boids under the northern lights rippling among the stars  
+  - Neon: rainbow light painting on a black grid, the color of a boid is its heading  
+  - Paper: ink on paper, the trails like brush strokes  
+- The Long trails of the Display Options are trails of light fading away in a few seconds, like a long exposure photograph: each ambiance has its own length, from half a second for the birds of the sunset to 2.5 seconds under the aurora  
+- The backgrounds belong to the scene: the camera of the cinema mode films them like the world, its grid, its sun, its lights, and they go on a little beyond it. Only the darker edges of the picture, an effect of the lens, stay on the screen. They are only decoration, the simulation knows nothing about them. Drawing a frame takes about as long in every ambiance (0.3 to 1.7 ms, measured), and under 40 FPS they lighten their effects: fewer lights, shorter trails  
 - The simulation starts in Dark Mode, without the Quadtree drawn: both can be changed in the Display Options  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
@@ -26,7 +35,7 @@
 - In winter the fertile areas hold much less plankton, 15 % of the summer by default ("Winter plankton %"), and the mist turns icy blue: the births stop, the algae die, and the boids that spend too much energy starve  
 - The season and the year are shown under the counters, the winters are shaded behind the charts  
 - With the defaults, the flocks grow to 60 to 110 boids in summer and autumn, and fall back to 30 to 60 in winter, where the Infinite mode tops them up with a few newcomers: 56 to 59 boids on average (measured over 3 years)  
-- The seasons can be switched off in the Boids Options. The demo always has them, the challenges balanced before them don't  
+- The seasons can be switched off in the Boids Options. The cinema mode always has them, the challenges balanced before them don't  
 
 ### The Algae
 - Algae grow in place on the sea floor, drawn as small trees without leaves: a short trunk going up, that soon forks into branches spreading wide, some bending up, others drooping. A sprout is a short stem, its branches show as it grows, then the whole tree keeps getting bigger with the food it holds  
@@ -63,7 +72,7 @@
 - A link is short: only the changed settings are written, readable (like `?darkMode=false&boidLifespan=300`), and the walls and currents are simplified then packed in 4 characters per point  
 - Opening a link replaces the settings, which are then remembered. The address forgets the link right away: a reload keeps the settings, but not the walls and currents, like the ones drawn by hand  
 - The values of a link are checked: a number is brought back into the range of its option, anything else is ignored  
-- The settings of the demo and of the challenges are never remembered, the settings of the user come back when they end  
+- The settings of the cinema mode and of the challenges are never remembered, the settings of the user come back when they end  
 - In a message, a link shows a preview: the title, a short description and a picture of the simulation. The site has its own icon, a small flock of boids  
 
 ### The Explain Mode
@@ -95,12 +104,15 @@
 - Holding Shift and hovering a boid or a predator shows its generation, genes (with its endurance, and how far and how wide it sees, also drawn as a dashed cone), and age (or hunger for a Predator), the mouse then doesn't scare the boids. When the mouse stops, the card stands still to be read and its boid stays circled, until the mouse moves or Shift is released  
 - The simulation can be sped up x2, x4 or x8 in the Simulation Options, or with the + and - keys, to watch the evolution  
 
-### The Demo Mode
-- A never ending screensaver, started with the D key, the Simulation Options, or the url `index.html?demo`  
+### The Cinema Mode
+- A never ending screensaver of beautiful scenes, started with the D key, the Cinema button of the Simulation Options, or the url `index.html?demo`  
 - The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
-- Scenes (Shoal, Murmuration, Fireflies, Night Hunt) follow each other every 2.5 minutes, with a smooth transition of the parameters  
+- Scenes follow each other every 2.5 minutes, each in its ambiance, with a smooth transition of the parameters and a fade to black between them: Shoal (fish in the abyss), Murmuration (birds at sunset), Fireflies (comets under the aurora), Night Hunt (neon comets) and Ink (on paper)  
+- The trails are long, and a camera films shots: wide ones of the whole world (10 to 15 seconds), and medium (1.6x) or close (2.3x) ones following a flock (16 to 26 seconds). After a closer shot, it steps back now and then, or keeps on following the same flock from another distance  
+- The camera moves like critically damped springs: it speeds up and slows down smoothly and never overshoots, and it follows a flock without lagging behind, a little ahead of it. It may show a little beyond the world rather than stop abruptly at a border. Measured over 90 seconds: no jolt, the followed flock in the middle of the picture 96 % of the time  
+- Between two scenes, in the dark, the camera cuts to a new shot  
 - A director keeps the ecosystem alive: new flocks and predator packs arrive from the borders when a population is low, with the genes of the current population, and reproduction stops when a population is too large or the FPS too low  
-- The seasons and the algae are always on during the demo  
+- The seasons and the algae are always on during the cinema mode  
 - Moving the mouse, or a click, shows how to exit: D, Esc, or a second click (a second tap on a phone)  
 
 ### The Quadtree
@@ -133,7 +145,7 @@
 - Every gene varies slightly (+/- 2 %) at each birth, on top of the rarer and larger mutations  
 - Genes have a cost: each +10 % of speed, fertility or agility shortens the life of a Regular Boid by 15 %, and each +10 % of fertility or agility shortens the starvation resistance of a Predator by 15 % (fast Predators already get hungry faster). The best genes depend on the predation: boids that are eaten young gain from living fast, boids that die of old age gain from living long. The cost can be modified in the Boids Options  
 - In Infinite mode, reinforcements arrive when fewer than 30 Regular Boids are left (a few boids can hardly find partners), or when no Predator is left  
-- Reinforcements (Infinite mode, Demo Mode) inherit the genes of the living population, or of the last 30 dead individuals if the species is extinct  
+- Reinforcements (Infinite mode, Cinema Mode) inherit the genes of the living population, or of the last 30 dead individuals if the species is extinct  
 - The Reproduction Rate shortens both the cooldown and, for Regular Boids, the quiet time needed to nest  
 - The size shows the speed, which goes against the endurance: a boid 10 % faster is 15 % smaller, a slower one bigger. A big body lasts longer: the energy of a boid, and the time a predator can go without eating, go as far as the square root of its size. The small fast boids escape the predators, the big slow ones get through the winters  
 - The Vision of a Regular Boid sets how far it sees the predators, from 0.5 to 1.5 times the Predator Detection Radius of the Boids Options: it flees sooner, but its good eyes cost energy (+30 % of the energy spent at the default speed for +50 % of vision, at the default gene cost), and fleeing more often leaves less quiet time to nest. Without plankton, good eyes shorten the life instead  
@@ -153,16 +165,15 @@
 - Angular 22, with standalone components (no NgModule nor router for this single page), zoneless change detection, the new control flow (`@if`, `@for`) and the esbuild based `@angular/build`  
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection. `options/options.component.ts` is the panel of the counters and of the options, the ranges of its sliders come from `classes/Settings.ts`  
-- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation, `classes/Settings.ts` remembers the settings and writes or reads the shared links  
+- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/Ambiance.ts` defines the ambiances and `classes/Backdrop.ts` paints their backgrounds, `classes/DemoMode.ts` drives the cinema mode, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation, `classes/Settings.ts` remembers the settings and writes or reads the shared links  
 - `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton, `classes/Plants.ts` grows the algae  
-- `src/favicon.svg` is the icon, also drawn as `favicon.ico` (16, 32 and 48 px) and `apple-touch-icon.png` (180 px). `src/assets/preview.png` is the picture of the link previews, a capture of the demo at 1200 x 630 px, declared with absolute addresses in `index.html`  
+- `src/favicon.svg` is the icon, also drawn as `favicon.ico` (16, 32 and 48 px) and `apple-touch-icon.png` (180 px). `src/assets/preview.png` is the picture of the link previews, a capture of the cinema mode (Murmuration) at 1200 x 630 px, declared with absolute addresses in `index.html`  
 - `index.html` also gives the search engines the canonical address (the shared links all lead to it), a description of the application as structured data, and a short presentation for the robots and the visitors without JavaScript  
 
 ### Tests
 - `ng test` runs the unit tests: the engine (obstacles never crossed, reinforcements, energy, Super Predators...), the Quadtree, the drawn lines, the plankton, and the components  
 - They run with Vitest in a headless Chromium driven by Playwright, as the components draw on real canvases: set `CHROME_BIN` to the installed Chrome, or run `npx playwright install chromium` once  
 
-### Futures developments and ideas
-- More genes: the sociability, with a confusion of the predators facing a large flock  
-- A challenge on the agility: it evolves too slowly for a goal within 20 minutes to be reached reliably  
-- A Hide and Seek challenge, with short-sighted predators and flocks hidden behind walls: the first tries were too random to be balanced  
+### Todos
+- An arcade mode, a wild game with explosions and trapped fish: its rules to be written first  
+- More skins for the boids  

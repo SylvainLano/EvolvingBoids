@@ -82,8 +82,8 @@
             </div>
         </div>
     }
-    <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
-    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Click again, or press D or Esc, to exit the demo</div>
+    <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle" [class.demo-light]="!darkMode">{{ demo.sceneTitle }}</div>
+    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint" [class.demo-light]="!darkMode">Click again, or press D or Esc, to exit the cinema mode</div>
 </div>
 
 <div class="tool-bar" [class.demo-hidden]="demo.active" [class.tool-bar-attention]="explainGlows" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">

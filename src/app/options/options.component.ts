@@ -67,16 +67,28 @@ export class OptionsComponent {
         ],
       },
       {
+        kind: 'choice', key: 'ambiance', label: 'Ambiance', options: [
+          { value: 'classic', label: 'Classic', title: 'The usual sea, dark or light.' },
+          { value: 'abyss', label: 'Abyss', title: 'Bioluminescent fish in the deep sea, under light shafts and falling marine snow.' },
+          { value: 'sunset', label: 'Sunset', title: 'Dark birds against a sunset sky, like starlings.' },
+          { value: 'aurora', label: 'Aurora', title: 'Glowing boids under the northern lights and the stars.' },
+          { value: 'neon', label: 'Neon', title: 'Rainbow light painting on a black grid: the color of a boid is its heading.' },
+          { value: 'paper', label: 'Paper', title: 'Ink on paper.' },
+        ],
+      },
+      {
         kind: 'choice', key: 'boidShape', label: 'Shape', options: [
           { value: 'arrow', label: 'Arrow', title: 'Arrow heads, with the Canvas renderer.' },
           { value: 'fish', label: 'Fish', title: 'Fish waving their tails, and sharks for the predators, with the Canvas renderer.' },
           { value: 'bird', label: 'Bird', title: 'Birds flapping their wings, and hawks for the predators, with the Canvas renderer.' },
           { value: 'letters', label: 'Letters', title: 'A letter for each family: a mutant gets the next one. Lowercase boids, uppercase predators, with the Canvas renderer.' },
+          { value: 'comets', label: 'Comets', title: 'Glowing heads, their trails are their tails: beautiful with the long trails, with the Canvas renderer.' },
         ],
       },
       toggle('darkMode', 'Dark mode'),
       toggle('glow', 'Glow', 'Additive blending and halos, with the Canvas renderer in Dark Mode.'),
       slider('trailLength', 'Trails length', 2, '', 'With the Canvas renderer.'),
+      toggle('longTrails', 'Long trails', 'Trails of light fading away in a few seconds, like a long exposure photograph, with the Canvas renderer.'),
       toggle('displayCharts', 'Charts', 'Populations, plankton, and average genes compared to the species defaults, with the winters shaded.'),
       toggle('displayBoidCount', 'Counters'),
       toggle('displayFPSCount', 'FPS'),

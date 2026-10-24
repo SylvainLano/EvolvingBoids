@@ -28,8 +28,8 @@
                     <div class="actions">
                         <button type="button" class="action" (click)="app.sim.pauseSimulation = !app.sim.pauseSimulation">{{ app.sim.pauseSimulation ? 'Resume' : 'Pause' }}</button>
                         <button type="button" class="action" (click)="app.restartButton()">Restart {{ app.challenges.active !== null ? 'challenge' : '' }}</button>
-                        <button type="button" class="action" title="A never ending screensaver, in fullscreen. Also with the D key, or the url index.html?demo"
-                            (click)="app.demo.start(true)">Demo</button>
+                        <button type="button" class="action" title="The cinema mode: a never ending screensaver of beautiful scenes, in fullscreen. Also with the D key, or the url index.html?demo"
+                            (click)="app.demo.start(true)">Cinema</button>
                     </div>
                     <div class="label" title="Speed up the simulation to watch the evolution, also with the + and - keys">Speed</div>
                     <div class="segments">

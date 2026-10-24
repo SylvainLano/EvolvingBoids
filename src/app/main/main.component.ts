@@ -5,6 +5,7 @@ import { OptionsComponent } from '../options/options.component';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Point } from '../classes/Boid';
 import { BoidShape, CanvasRenderer, Explained, MutantHalo } from '../classes/CanvasRenderer';
+import { AMBIANCES, AmbianceName } from '../classes/Ambiance';
 import { SegmentField } from '../classes/SegmentField';
 import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
@@ -61,6 +62,8 @@ export class MainComponent implements OnInit, OnDestroy {
   // Display
   renderer: 'canvas' | 'dom' = 'canvas';        // the DOM renderer is kept to compare performances
   boidShape: BoidShape = 'arrow';               // how the Canvas renderer draws the boids
+  longTrails = false;                           // trails of light fading away in a few seconds, with the Canvas renderer
+  private ambianceName: AmbianceName = 'classic';
   darkMode = true;                              // the boids glow beautifully on a dark sea
   glow = true;                                  // additive blending and halos with the canvas renderer, in dark mode
   drawQuadtree = false;
@@ -121,6 +124,7 @@ export class MainComponent implements OnInit, OnDestroy {
   mutantHalos: MutantHalo[] = [];
 
   readonly uiRefreshInterval = 200;             // delay in ms between two refreshes of the counters, messages and charts
+  private readonly lowQualityFPS = 40;          // under this, the ambiances lighten their effects
   private readonly sizeCheckInterval = 500;     // delay in ms between two checks of the window size
   private lastUiRefresh = 0;
   private lastChartRefresh = 0;
@@ -316,7 +320,21 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   // The algae are green in spring and summer, yellow in autumn, brown in winter
+  // The look of the world: its background and its colors. An ambiance comes with the dark mode that suits it
+  get ambiance(): AmbianceName {
+    return this.ambianceName;
+  }
+
+  set ambiance(name: AmbianceName) {
+    this.ambianceName = name;
+    this.darkMode = AMBIANCES[name].dark ?? this.darkMode;
+  }
+
   get plantColor(): string {
+    const ambiance = AMBIANCES[this.ambiance];
+    if ( ambiance.algae !== null ) {
+      return ambiance.algae;
+    }
     const colors = {
       Spring: ['rgba(74, 222, 128, 0.75)', 'rgba(22, 163, 74, 0.75)'],
       Summer: ['rgba(34, 197, 94, 0.75)', 'rgba(21, 128, 61, 0.75)'],
@@ -772,7 +790,12 @@ export class MainComponent implements OnInit, OnDestroy {
     this.canvasRenderer.render(
       this.renderer === 'canvas' ? [sim.boids, sim.predators] : [],
       this.drawQuadtree ? this.finalQuadtreeList : null,
-      { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount, shape: this.boidShape },
+      {
+        darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount, shape: this.boidShape,
+        ambiance: AMBIANCES[this.ambiance], longTrails: this.longTrails,
+        camera: this.demo.active ? this.demo.camera : null, fade: this.demo.active ? this.demo.fade : 0,
+        quality: this.sim.fps < this.lowQualityFPS ? 0.5 : 1,
+      },
       this.mutantHalos,
       this.inspectedBoid === null ? null
         : {
@@ -783,7 +806,7 @@ export class MainComponent implements OnInit, OnDestroy {
       this.explained,
       {
         food: sim.foodEnabled
-          ? { texture: sim.food.texture(this.darkMode), width: sim.food.cols * sim.food.cellSize, height: sim.food.rows * sim.food.cellSize }
+          ? { texture: sim.food.texture(this.darkMode, AMBIANCES[this.ambiance].plankton), width: sim.food.cols * sim.food.cellSize, height: sim.food.rows * sim.food.cellSize }
           : null,
         plants: sim.foodEnabled && sim.plantsEnabled
           ? { plants: sim.plants.plants, reach: (plant) => sim.plants.reach(plant), scale: (plant) => sim.plants.scale(plant), color: this.plantColor }

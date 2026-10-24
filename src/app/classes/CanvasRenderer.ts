@@ -3,6 +3,8 @@ import type { Boid, Point } from './Boid';
 import type { Plant } from './Plants';
 import type { Quadtree } from './Quadtree';
 import { boidColor } from './BoidColor';
+import { AMBIANCES, Ambiance } from './Ambiance';
+import { Backdrop } from './Backdrop';
 
 // A ring spreading around a newborn mutant
 export interface MutantHalo {
@@ -10,14 +12,26 @@ export interface MutantHalo {
   start: number;      // performance.now() at birth, the halo lasts in real time so it stays visible when the simulation is sped up
 }
 
-// How the boids are drawn: arrow heads, fish and sharks, birds and hawks, or the letter of their family
-export type BoidShape = 'arrow' | 'fish' | 'bird' | 'letters';
+// How the boids are drawn: arrow heads, fish and sharks, birds and hawks, the letter of their family, or glowing comets
+export type BoidShape = 'arrow' | 'fish' | 'bird' | 'letters' | 'comets';
+
+// What the cinema mode frames: the point at the center of the screen, and how close
+export interface Camera {
+  x: number;
+  y: number;
+  zoom: number;
+}
 
 export interface RenderOptions {
   darkMode: boolean;
   glow: boolean;                  // additive blending and halos, only visible in dark mode
   displayQuadtreeCount: boolean;
   shape: BoidShape;
+  ambiance: Ambiance;
+  longTrails: boolean;            // trails of light fading away in a few seconds, like a long exposure
+  camera: Camera | null;          // the whole world when null
+  fade: number;                   // from 0 to 1, a black veil between two scenes of the cinema mode
+  quality: number;                // 1, or 0.5 when the FPS gets low: fewer lights in the background, shorter long trails
 }
 
 // What a bubble of the Explain mode circles: a boid or an area, and the bubble itself, linked to it by a thin line
@@ -52,6 +66,15 @@ export class CanvasRenderer {
   private haloSprites = new Map<string, HTMLCanvasElement>();
   private beats = new WeakMap<Boid, { value: number, time: number }>();   // the beat of the tail or of the wings of each boid
   private letterFont = '';                    // the font of the letters is only set when it changes, it is costly
+  private ambiance: Ambiance = AMBIANCES.classic;
+  private backdrop = new Backdrop();
+  // The long trails are painted on their own layer, which fades away a little at each frame
+  private trailLayer: HTMLCanvasElement | null = null;
+  private trailKey = '';
+  private trailTime = 0;
+  private lastPainted = new WeakMap<Boid, Point>();
+  private readonly trailWidths = { boid: 1.6, predator: 2.4, super: 3.2 };   // in px
+  private readonly trailFadeInterval = 1 / 12;   // in seconds between two fadings of the long trails
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -81,14 +104,29 @@ export class CanvasRenderer {
     const ctx = this.ctx;
     const now = performance.now();
     this.letterFont = '';
+    this.ambiance = options.ambiance;
+    // An ambiance has its own background, the classic one follows the dark mode
+    const darkMode = options.ambiance.dark ?? options.darkMode;
 
-    // An opaque background, so the additive blending of the glow is computed against it
+    // Drawing on the screen, or on the world framed by the camera of the cinema mode
+    const onScreen = () => ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+    const camera = options.camera;
+    const onWorld = () => camera === null ? onScreen() : ctx.setTransform(this.pixelRatio * camera.zoom, 0, 0, this.pixelRatio * camera.zoom,
+      this.pixelRatio * (this.width / 2 - camera.x * camera.zoom), this.pixelRatio * (this.height / 2 - camera.y * camera.zoom));
+
+    // An opaque background, so the additive blending of the glow is computed against it: the one of the scene,
+    // filmed by the camera like the world, then the darker edges of the lens, on the screen
+    onScreen();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = options.darkMode ? '#0f172a' : 'white';
-    ctx.fillRect(0, 0, this.width, this.height);
+    this.backdrop.fill(ctx, options.ambiance, darkMode, this.width, this.height);
+    onWorld();
+    this.backdrop.drawScene(ctx, options.ambiance, this.width, this.height, now, options.quality);
+    onScreen();
+    this.backdrop.drawLens(ctx, options.ambiance, this.width, this.height);
+    onWorld();
 
     if (quadtrees !== null) {
-      this.drawQuadtrees(quadtrees, options);
+      this.drawQuadtrees(quadtrees, { ...options, darkMode });
     }
 
     // The plankton is a smooth glowing mist, scaled up from one pixel per cell
@@ -107,56 +145,126 @@ export class CanvasRenderer {
 
     // The currents flow under the boids, the obstacles stand among them
     for (const current of world.currents) {
-      this.drawCurrent(current, world.currentWidth, now, options.darkMode);
+      this.drawCurrent(current, world.currentWidth, now, darkMode);
     }
     for (const obstacle of world.obstacles) {
-      this.drawObstacle(obstacle, options.darkMode);
+      this.drawObstacle(obstacle, darkMode);
     }
     if (world.stroke !== null) {
       if (world.stroke.kind === 'obstacle') {
-        this.drawObstacle(world.stroke.points, options.darkMode);
+        this.drawObstacle(world.stroke.points, darkMode);
       } else {
-        this.drawCurrent(world.stroke.points, world.currentWidth, now, options.darkMode);
+        this.drawCurrent(world.stroke.points, world.currentWidth, now, darkMode);
       }
     }
 
-    const additive = options.darkMode && options.glow;
-    if (additive) {
-      ctx.globalCompositeOperation = 'lighter';
+    const additive = darkMode && options.glow && options.ambiance.glow;
+    if (options.longTrails) {
+      this.paintLongTrails(groups, darkMode, additive, now, options.quality);
+      ctx.globalCompositeOperation = additive ? 'lighter' : 'source-over';
+      ctx.drawImage(this.trailLayer!, 0, 0, this.width, this.height);
+    } else {
+      this.trailLayer = null;
     }
+    ctx.globalCompositeOperation = additive ? 'lighter' : 'source-over';
 
     for (const group of groups) {
-      for (const boid of group) {
-        this.drawTrail(boid, options.darkMode);
+      if (!options.longTrails) {
+        for (const boid of group) {
+          this.drawTrail(boid, darkMode);
+        }
       }
       if (additive) {
         for (const boid of group) {
-          this.drawHalo(boid, options.darkMode);
+          this.drawHalo(boid, darkMode);
         }
       }
       for (const boid of group) {
-        this.drawBody(boid, options.darkMode, options.shape, now);
+        this.drawBody(boid, darkMode, options.shape, now);
       }
     }
 
     for (const halo of mutantHalos) {
-      this.drawMutantHalo(halo, now, options.darkMode);
+      this.drawMutantHalo(halo, now, darkMode);
     }
 
     ctx.globalCompositeOperation = 'source-over';
     if (highlighted !== null) {
-      this.drawHighlight(highlighted.boid, highlighted.sight, highlighted.field, options.darkMode);
+      this.drawHighlight(highlighted.boid, highlighted.sight, highlighted.field, darkMode);
     }
     if (explained !== null) {
-      this.drawExplained(explained, now, options.darkMode);
+      this.drawExplained(explained, now, darkMode);
     }
     if (world.eraser !== null) {
-      this.drawEraser(world.eraser.position, world.eraser.radius, options.darkMode);
+      this.drawEraser(world.eraser.position, world.eraser.radius, darkMode);
+    }
+
+    // The black veil of the cinema mode between two scenes, over the whole screen
+    onScreen();
+    if (options.fade > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, options.fade)})`;
+      ctx.fillRect(0, 0, this.width, this.height);
     }
   }
 
+  // The color of a boid: the shade of its family in the palette of the ambiance, or the hue of its heading for the rainbow
   private color(boid: Boid, darkMode: boolean, opacity: number = 1): string {
-    return boidColor(boid.isPredator, boid.isDead, boid.genome.lineage, boid.alpha, darkMode, opacity, boid.isSuper);
+    if (this.ambiance.rainbow && !boid.isPredator && !boid.isDead) {
+      return `hsla(${this.headingHue(boid)}, 100%, 62%, ${opacity})`;
+    }
+    return boidColor(boid.isPredator, boid.isDead, boid.genome.lineage, boid.alpha, darkMode, opacity, boid.isSuper, this.ambiance.palette);
+  }
+
+  // The heading of a boid as a hue, in steps of 10° so that the halos can be reused
+  private headingHue(boid: Boid): number {
+    return Math.round(((Math.atan2(boid.velocity.y, boid.velocity.x) * 180 / Math.PI + 360) % 360) / 10) * 10 % 360;
+  }
+
+  // The long trails: the layer fades away a little, as much in a second whatever the FPS, then each boid paints the way
+  // it swam since the last frame. The layer covers the world, the camera frames it like the rest
+  private paintLongTrails(groups: Boid[][], darkMode: boolean, additive: boolean, now: number, quality: number) {
+    const key = `${this.canvas.width}|${this.canvas.height}|${this.ambiance.name}|${darkMode}`;
+    if (this.trailLayer === null || key !== this.trailKey) {
+      this.trailKey = key;
+      this.trailLayer = document.createElement('canvas');
+      this.trailLayer.width = this.canvas.width;
+      this.trailLayer.height = this.canvas.height;
+      this.lastPainted = new WeakMap();
+      this.trailTime = now;
+    }
+    const ctx = this.trailLayer.getContext('2d')!;
+    ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+    // Nearly gone (5 % left) after the fading time of the ambiance, twice as fast when the FPS gets low.
+    // The layer fades by steps, a few times per second: a tiny fade at each frame would leave faint lines forever,
+    // as the opacity of a pixel is rounded back up to its value
+    const elapsed = Math.min(0.25, (now - this.trailTime) / 1000);
+    if (elapsed >= this.trailFadeInterval) {
+      this.trailTime = now;
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = `rgba(0, 0, 0, ${1 - Math.pow(0.05, elapsed / (this.ambiance.trailFade * quality))})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    // Square ends: the round ones of the short pieces would overlap, and add up into beads of light
+    ctx.globalCompositeOperation = additive ? 'lighter' : 'source-over';
+    ctx.lineCap = 'butt';
+    for (const group of groups) {
+      for (const boid of group) {
+        const from = this.lastPainted.get(boid);
+        const to = { x: boid.position.x, y: boid.position.y };
+        this.lastPainted.set(boid, to);
+        // A newcomer, or a boid moved by hand, doesn't paint a line across the screen
+        if (from === undefined || (to.x - from.x) ** 2 + (to.y - from.y) ** 2 > 60 ** 2) {
+          continue;
+        }
+        ctx.lineWidth = boid.isSuper ? this.trailWidths.super : boid.isPredator ? this.trailWidths.predator : this.trailWidths.boid;
+        ctx.strokeStyle = this.color(boid, darkMode, additive ? 0.55 : 0.5);
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+      }
+    }
   }
 
   // A small tree, drawn as far as it has grown from its root, at its size: the last segment is drawn in part
@@ -248,7 +356,7 @@ export class CanvasRenderer {
     const boid = halo.boid;
     const ctx = this.ctx;
     ctx.lineWidth = 2;
-    ctx.strokeStyle = boidColor(boid.isPredator, false, boid.genome.lineage, 1, darkMode, 1 - progress);
+    ctx.strokeStyle = boidColor(boid.isPredator, false, boid.genome.lineage, 1, darkMode, 1 - progress, false, this.ambiance.palette);
     ctx.beginPath();
     ctx.arc(boid.position.x, boid.position.y, 4 + this.mutantHaloRadius * progress, 0, Math.PI * 2);
     ctx.stroke();
@@ -386,7 +494,8 @@ export class CanvasRenderer {
     const round = (value: number) => Math.round(value * 10) / 10;
     const lineage = round(boid.genome.lineage);
     const alpha = round(boid.alpha);
-    const key = `${boid.isPredator}|${boid.isSuper}|${lineage}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
+    const hue = this.ambiance.rainbow && !boid.isPredator ? this.headingHue(boid) : null;
+    const key = `${this.ambiance.name}|${hue}|${boid.isPredator}|${boid.isSuper}|${lineage}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
 
     let sprite = this.haloSprites.get(key);
     if (sprite === undefined) {
@@ -395,8 +504,10 @@ export class CanvasRenderer {
       sprite.width = sprite.height = size;
       const spriteCtx = sprite.getContext('2d')!;
       const gradient = spriteCtx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      gradient.addColorStop(0, boidColor(boid.isPredator, false, lineage, alpha, darkMode, this.haloOpacity, boid.isSuper));
-      gradient.addColorStop(1, boidColor(boid.isPredator, false, lineage, alpha, darkMode, 0, boid.isSuper));
+      const color = (opacity: number) => hue !== null ? `hsla(${hue}, 100%, 62%, ${opacity})`
+        : boidColor(boid.isPredator, false, lineage, alpha, darkMode, opacity, boid.isSuper, this.ambiance.palette);
+      gradient.addColorStop(0, color(this.haloOpacity));
+      gradient.addColorStop(1, color(0));
       spriteCtx.fillStyle = gradient;
       spriteCtx.fillRect(0, 0, size, size);
       this.haloSprites.set(key, sprite);
@@ -412,6 +523,13 @@ export class CanvasRenderer {
     ctx.fillStyle = this.color(boid, darkMode);
     if (shape === 'letters') {
       this.drawLetter(boid, length);
+      return;
+    }
+    // A comet is a bright round head, its tail is its trail
+    if (shape === 'comets') {
+      ctx.beginPath();
+      ctx.arc(boid.position.x, boid.position.y, length * 0.28, 0, Math.PI * 2);
+      ctx.fill();
       return;
     }
     const angle = Math.atan2(boid.velocity.y, boid.velocity.x);
