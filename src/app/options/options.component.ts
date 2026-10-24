@@ -53,9 +53,11 @@ export class OptionsComponent {
         kind: 'choice', key: 'lowFPSAction', label: 'When the FPS gets low', options: [
           { value: 'PopulationControl', label: 'Population control', title: 'Remove 5 % of the boids in the side in excess.' },
           { value: 'BudgetCuts', label: 'Budget cuts', title: 'Remove 50 % of the boids in each side.' },
+          { value: 'SuperPredator', label: 'Super Predator', title: 'A Super Predator comes to thin out the boids, at most once a minute.' },
           { value: 'Nothing', label: 'Nothing', title: 'Continue the simulation without noticing depletion.' },
         ],
       },
+      toggle('deusExMachina', 'Deus Ex Machina', 'A Super Predator comes to thin out the boids when they crowd the screen, at most once a minute.'),
     ],
     Display: [
       {
@@ -87,7 +89,8 @@ export class OptionsComponent {
       slider('cohesionRadius', 'Cohesion radius', 5, ' px'),
       slider('boidsSeparationRadius', 'Separation radius', 5, ' px'),
       heading('Predators'),
-      slider('fleeRadius', 'Detection radius', 20, ' px', 'How far a boid sees the predators, before its vision gene.'),
+      slider('fleeRadius', 'Detection radius', 20, ' px', 'How far a boid sees the predators all around it, before its field of view and its vision gene.'),
+      slider('boidFieldOfView', 'Field of view', 30, '°', 'The boids don\'t see the predators behind them, but the narrower their field of view, the farther they see ahead. 360°: all around.'),
       slider('fleeFactor', 'Fleeing force', 1),
       toggle('fleeReset', 'Fleeing resets the nesting time'),
       heading('Life'),
@@ -108,7 +111,8 @@ export class OptionsComponent {
     ],
     Predator: [
       heading('Hunting'),
-      slider('predatorSight', 'Detection radius', 50, ' px', 'How far a predator sees the boids, before its vision gene. Without a prey in sight, it prowls slowly. 0: the whole screen, without the vision gene.'),
+      slider('predatorSight', 'Detection radius', 50, ' px', 'How far a predator sees the boids all around it, before its field of view and its vision gene. Without a prey in sight, it prowls slowly. 0: the whole screen, without the vision gene.'),
+      slider('predatorFieldOfView', 'Field of view', 30, '°', 'The predators look ahead: the narrower their field of view, the farther they see. 360°: all around.'),
       toggle('predatorsCooperativeness', 'Cooperative hunt', 'Predator will try to choose a prey that is not already chased.'),
       toggle('predatorVersatility', 'Change of prey'),
       slider('predatorsSeparationRadius', 'Separation radius', 5, ' px'),

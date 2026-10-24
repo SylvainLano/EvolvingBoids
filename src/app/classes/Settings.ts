@@ -28,7 +28,8 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'trailLength', owner: 'sim', range: [0, 20] },
   // Simulation
   { key: 'simulationMode', owner: 'sim', choices: ['DeathMatch', 'Retry', 'Continued', 'Infinite'] },
-  { key: 'lowFPSAction', owner: 'sim', choices: ['PopulationControl', 'BudgetCuts', 'Nothing'] },
+  { key: 'lowFPSAction', owner: 'sim', choices: ['PopulationControl', 'BudgetCuts', 'SuperPredator', 'Nothing'] },
+  { key: 'deusExMachina', owner: 'sim' },
   // Boids
   { key: 'alignmentRadius', owner: 'sim', range: [10, 200] },
   { key: 'cohesionRadius', owner: 'sim', range: [10, 200] },
@@ -47,6 +48,7 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'boidEvolutionChances', owner: 'sim', range: [0, 100] },
   { key: 'boidEvolutionCap', owner: 'sim', range: [5, 95] },
   { key: 'fleeRadius', owner: 'sim', range: [20, 300] },
+  { key: 'boidFieldOfView', owner: 'sim', range: [90, 360] },
   { key: 'fleeFactor', owner: 'sim', range: [-5, 10] },
   // Predators
   { key: 'predatorsCooperativeness', owner: 'sim' },
@@ -58,6 +60,7 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'predatorsSeparationRadius', owner: 'sim', range: [10, 200] },
   { key: 'predatorStarvationModificator', owner: 'sim', range: [-10, 10] },
   { key: 'predatorSight', owner: 'sim', range: [0, 1000] },
+  { key: 'predatorFieldOfView', owner: 'sim', range: [90, 360] },
 ];
 
 // A value read from a link or from the browser, null when it isn't valid for this setting: a number out of

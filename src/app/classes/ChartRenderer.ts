@@ -53,7 +53,6 @@ export class ChartRenderer {
     const winterColor = darkMode ? 'rgba(148, 197, 255, 0.1)' : 'rgba(30, 64, 175, 0.07)';
     const winters = samples.map(s => s.winter);
 
-    const rowHeight = (this.height - this.padding) / 4;
     const rows: { title: string, series: Series[], deviation: boolean }[] = [
       {
         title: 'Population',
@@ -89,8 +88,17 @@ export class ChartRenderer {
           { label: 'Predators', values: samples.map(s => s.predatorVision), color: predatorColor, unit: '%' },
         ],
       },
+      {
+        title: 'Focus',
+        deviation: true,
+        series: [
+          { label: 'Boids', values: samples.map(s => s.boidFocus), color: boidColor, unit: '%' },
+          { label: 'Predators', values: samples.map(s => s.predatorFocus), color: predatorColor, unit: '%' },
+        ],
+      },
     ];
 
+    const rowHeight = (this.height - this.padding) / rows.length;
     rows.forEach((row, index) => {
       const top = this.padding + index * rowHeight;
       this.drawRow(row.title, row.series, row.deviation, top, rowHeight - this.padding, textColor, gridColor, winters, winterColor);

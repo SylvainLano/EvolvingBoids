@@ -7,13 +7,13 @@ import { PlantField } from './Plants';
 import { Statistics } from './Statistics';
 
 export type SimulationMode = 'DeathMatch' | 'Retry' | 'Continued' | 'Infinite';
-export type LowFPSAction = 'PopulationControl' | 'BudgetCuts' | 'Nothing';
+export type LowFPSAction = 'PopulationControl' | 'BudgetCuts' | 'SuperPredator' | 'Nothing';
 export type SeasonName = 'Spring' | 'Summer' | 'Autumn' | 'Winter';
 const SEASONS: SeasonName[] = ['Spring', 'Summer', 'Autumn', 'Winter'];
 
 // What happens in the simulation, for the display: a death has its cause, a capture its hunter (boid) and prey (other)
 export type DeathCause = 'oldAge' | 'starved' | 'predatorStarved' | 'superPredatorGone' | 'erased';
-export type SimulationEventType = DeathCause | 'birth' | 'mutant' | 'caught' | 'gaveUp' | 'reinforcement' | 'superPredator';
+export type SimulationEventType = DeathCause | 'birth' | 'mutant' | 'caught' | 'gaveUp' | 'reinforcement' | 'superPredator' | 'deusExMachina';
 export interface SimulationEvent {
   type: SimulationEventType;
   boid: Boid;
@@ -39,7 +39,8 @@ export class Simulation {
   cohesionRadius = 40;                // radius to join other boids - can be modified by the user
   boidsSeparationRadius = 20;         // radius to move from other boids - can be modified by the user
   boidMaxSteeringForce = 0.1;         // maximum force to change direction
-  fleeRadius = 60;                    // distance at which a boid detects a predator - can be modified by the user
+  fleeRadius = 60;                    // distance at which a boid detects a predator all around it, before its field of view - can be modified by the user
+  boidFieldOfView = 270;              // in degrees, the boids don't see the predators behind them, but see farther ahead - can be modified by the user
   fleeFactor = 5;                     // importance of the flee regarding other directionnal factors - can be modified by the user
   fleeForceThreshold = 0.2;           // maximum fleeing force to have a quiet time - can be modified by the input boidReproductionModificator
   fleeReset = false;                  // does the fleeing process restarts the quiet time to 0
@@ -106,7 +107,8 @@ export class Simulation {
   ignoreDuration = 10;                // in seconds: a prey given up is not chased again for this long
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
-  predatorSight = 200;                // distance at which a predator sees the boids, times its vision gene, 0 for the whole screen without the gene - can be modified by the user
+  predatorSight = 200;                // distance at which a predator sees the boids all around it, before its field of view and its vision gene, 0 for the whole screen - can be modified by the user
+  predatorFieldOfView = 180;          // in degrees, the predators look ahead, and see farther than all around them - can be modified by the user
   predatorEyesCost = 0.25;            // hunger per step and per unit of gene cost, times (vision² - 1): +50 % of vision makes a predator chasing at full speed a fifth hungrier
   cruiseSpeed = 0.6;                  // part of its top speed at which a predator prowls, when it sees no prey
 
@@ -116,6 +118,10 @@ export class Simulation {
   superPredatorCaptureDistance = 8;
   superPredatorMaxSteeringForce = 0.15;
   superFleeRadius = 120;              // distance at which predators flee a Super Predator
+  deusExMachina = true;               // a Super Predator comes when the boids crowd the screen - can be modified by the user
+  deusExMachinaCrowding = 0.75;       // part of the carrying capacity of the screen that calls a Super Predator, when there are more boids than at the start
+  deusExMachinaDelay = 60;            // in seconds, at least between two Super Predators called
+  private lastDeusExMachina = -Infinity;   // the elapsed step of the last one
 
   // Obstacles, currents and borders
   obstacleAvoidRadius = 35;           // distance at which boids start to steer away from an obstacle, beyond the distance they need to turn
@@ -173,6 +179,7 @@ export class Simulation {
     this.predators = [];
     this.totalBoids = this.totalPredators = 0;
     this.elapsedSteps = 0;
+    this.lastDeusExMachina = -Infinity;
 
     // Initialize boids with random positions and velocities
     for (let i = 0; i < this.numberOfBoids; i++) {
@@ -279,6 +286,7 @@ export class Simulation {
     }
 
     this.dealWithDepletion();
+    this.callDeusExMachina();
 
     this.stats.step(
       this.boids,
@@ -288,7 +296,11 @@ export class Simulation {
       () => this.foodEnabled ? this.food.fillRatio() : NaN,
       this.seasonsEnabled && this.season.name === 'Winter',
       this.foodEnabled && this.plantsEnabled ? this.plants.plants.length : NaN,
-      this.predatorSight > 0
+      {
+        predatorVision: this.predatorSight > 0,
+        boidFocus: this.boidFieldOfView < 360,
+        predatorFocus: this.predatorSight > 0 && this.predatorFieldOfView < 360,
+      }
     );
 
     // Boids behavior rules
@@ -640,20 +652,21 @@ export class Simulation {
     return { x: predator.position.x + Math.cos(heading) * 5, y: predator.position.y + Math.sin(heading) * 5 };
   }
 
-  // The prey is close enough for the predator to see it, and not hidden by an obstacle
+  // The prey is close enough for the predator to see it, in its field of view, and not hidden by an obstacle
   private canSee(hunter: Boid, prey: Boid): boolean {
     return this.calculateDistanceSquared(hunter.position, prey.position) <= this.sightRadius(hunter) ** 2
+      && this.inFieldOfView(hunter, prey.position)
       && (this.obstacles.isEmpty || !this.obstacles.blocks(hunter.position, prey.position));
   }
 
-  // The closest prey in sight and not hidden by an obstacle: the closest ones are checked one by one, a few at most
+  // The closest prey in sight, in the field of view, and not hidden by an obstacle: the closest ones are checked one by one, a few at most
   private findVisiblePrey(predator: Boid): Boid | null {
     const hidden = new Set<Boid>();
     const ignored = this.elapsedSteps < predator.ignoredUntil ? predator.ignoredPrey : null;
     const sightSquared = this.sightRadius(predator) ** 2;
     for (let attempt = 0; attempt < 4; attempt++) {
       const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => boid !== ignored && !hidden.has(boid)
-        && this.calculateDistanceSquared(predator.position, boid.position) <= sightSquared);
+        && this.calculateDistanceSquared(predator.position, boid.position) <= sightSquared && this.inFieldOfView(predator, boid.position));
       if ( prey === null || this.canSee(predator, prey) ) {
         return prey;
       }
@@ -905,13 +918,36 @@ export class Simulation {
     }
   }
 
-  // How far a boid sees the predators, or a predator the boids, from the options and its vision
-  // Without a predator detection radius, and for the Super Predators, the whole screen
+  // How far a boid sees the predators, or a predator the boids: the detection radius all around, made longer by a narrower
+  // field of view (for the same surface), and by its vision gene. Without a predator detection radius, and for the Super Predators, the whole screen
   sightRadius(boid: Boid): number {
-    if ( boid.isPredator ) {
-      return this.predatorSight > 0 && !boid.isSuper ? this.predatorSight * boid.genome.vision : Infinity;
+    const base = boid.isPredator ? this.predatorSight : this.fleeRadius;
+    if ( boid.isPredator && (base === 0 || boid.isSuper) ) {
+      return Infinity;
     }
-    return this.fleeRadius * boid.genome.vision;
+    return base * boid.genome.vision * Math.sqrt(360 / this.fieldOfView(boid));
+  }
+
+  // The width of what a boid sees, in degrees, around where it swims: the field of view of its species,
+  // narrower or wider with its focus gene. Without a predator detection radius, and for the Super Predators, all around
+  fieldOfView(boid: Boid): number {
+    const base = boid.isPredator ? this.predatorFieldOfView : this.boidFieldOfView;
+    if ( boid.isPredator && (this.predatorSight === 0 || boid.isSuper) ) {
+      return 360;
+    }
+    return Math.min(360, base / boid.genome.focus);
+  }
+
+  // The point is in the field of view of the boid, a cone around where it swims, or all around when it stands still
+  inFieldOfView(boid: Boid, point: Point): boolean {
+    const field = this.fieldOfView(boid);
+    const speed = Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2);
+    const toPoint = { x: point.x - boid.position.x, y: point.y - boid.position.y };
+    const distance = Math.sqrt(toPoint.x ** 2 + toPoint.y ** 2);
+    if ( field >= 360 || speed === 0 || distance === 0 ) {
+      return true;
+    }
+    return (toPoint.x * boid.velocity.x + toPoint.y * boid.velocity.y) / (distance * speed) >= Math.cos(field / 2 * Math.PI / 180);
   }
 
   // How long a predator can go without eating, in distance swum: fertility shortens it, a big body lengthens it
@@ -927,8 +963,10 @@ export class Simulation {
   private fleePredators(currentBoid: Boid, predators: Boid[], sight: number): Point {
     const fleePredatorsForce = { x: 0, y: 0 };
     const fleeRadiusSquared = sight ** 2;
-    // The mouse acts as a predator
-    const threats = this.mousePosition !== null ? [...predators.map(predator => predator.position), this.mousePosition] : predators.map(predator => predator.position);
+    // Only the predators in its field of view, the boid doesn't see those behind it.
+    // The mouse acts as a predator seen all around, for the user to herd the boids
+    const seen = predators.filter(predator => this.inFieldOfView(currentBoid, predator.position)).map(predator => predator.position);
+    const threats = this.mousePosition !== null ? [...seen, this.mousePosition] : seen;
 
     for (const threat of threats) {
       const distanceSquared = this.calculateDistanceSquared(currentBoid.position, threat);
@@ -948,6 +986,7 @@ export class Simulation {
       maxVelocity: (Math.random() < 0.5 ? parent : partner).genome.maxVelocity,
       reproductionRate: (Math.random() < 0.5 ? parent : partner).genome.reproductionRate,
       vision: (Math.random() < 0.5 ? parent : partner).genome.vision,
+      focus: (Math.random() < 0.5 ? parent : partner).genome.focus,
       lineage: (Math.random() < 0.5 ? parent : partner).genome.lineage,
     };
 
@@ -1010,13 +1049,21 @@ export class Simulation {
       maxVelocity: vary(isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
       reproductionRate: vary(isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
       vision: vary(1),
+      focus: vary(1),
       lineage: (Math.random() * 2 - 1) * this.founderLineage,
     };
   }
 
-  // The genes a species evolves: the predators only evolve their vision when they don't see the whole screen
+  // The genes a species evolves: the predators only evolve their vision when they don't see the whole screen,
+  // and the focus only matters with a field of view narrower than all around
   private genes ( isPredator: boolean ): Gene[] {
-    return isPredator && this.predatorSight === 0 ? ['maxVelocity', 'reproductionRate'] : ['maxVelocity', 'reproductionRate', 'vision'];
+    const sighted = !isPredator || this.predatorSight > 0;
+    const focused = sighted && (isPredator ? this.predatorFieldOfView : this.boidFieldOfView) < 360;
+    return [
+      'maxVelocity', 'reproductionRate',
+      ...(sighted ? ['vision' as const] : []),
+      ...(focused ? ['focus' as const] : []),
+    ];
   }
 
   // Alter one random gene by one evolution step, for better or worse, within the evolution cap
@@ -1132,21 +1179,40 @@ export class Simulation {
   }
 
   // A Super Predator doesn't evolve nor reproduce, it hunts for a while then fades away
-  addSuperPredator(position: Point): Boid | null {
-    const superPredator = this.insertNewBoid (
-      position,
-      { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
-      true,
-      { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate, vision: 1, lineage: 0 },
-      0
-    );
+  // One added by the user is refused when the FPS is too low, one called by the Deus Ex Machina comes anyway
+  addSuperPredator(position: Point, called = false): Boid | null {
+    const velocity = { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
+    const genome = { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate, vision: 1, focus: 1, lineage: 0 };
+    const superPredator = called ? this.createBoid(position, velocity, true, genome, 0) : this.insertNewBoid(position, velocity, true, genome, 0);
     if ( superPredator !== null ) {
       // Its size doesn't come from its speed: it is drawn bigger than any predator
       superPredator.isSuper = true;
       superPredator.size = 1;
-      this.onEvent({ type: 'superPredator', boid: superPredator });
+      this.onEvent({ type: called ? 'deusExMachina' : 'superPredator', boid: superPredator });
     }
     return superPredator;
+  }
+
+  // Deus Ex Machina: when the boids crowd the screen, a Super Predator comes to thin them out
+  // A small screen is crowded from the start, it only comes when there are more boids than at the start
+  private callDeusExMachina() {
+    const crowd = Math.max(this.width * this.height / this.areaPerBoid * this.deusExMachinaCrowding, this.numberOfBoids * 1.1);
+    if ( this.deusExMachina && this.totalBoids >= crowd ) {
+      this.summonSuperPredator();
+    }
+  }
+
+  // A Super Predator coming from a random border, unless one is already hunting or the last one came recently
+  private summonSuperPredator() {
+    if ( this.elapsedSteps - this.lastDeusExMachina < this.deusExMachinaDelay * this.stepsPerSecond
+      || this.predators.some(predator => predator.isSuper && !predator.isDead) ) {
+      return;
+    }
+    this.lastDeusExMachina = this.elapsedSteps;
+    const position = Math.random() < 0.5
+      ? { x: Math.random() < 0.5 ? 10 : this.width - 10, y: Math.random() * this.height }
+      : { x: Math.random() * this.width, y: Math.random() < 0.5 ? 10 : this.height - 10 };
+    this.addSuperPredator(position, true);
   }
 
   // Remove the boids (they fade away), and the parts of the obstacles, currents and plankton within the radius
@@ -1178,6 +1244,8 @@ export class Simulation {
     } else if ( this.lowFPSAction == 'BudgetCuts' ) {
       this.removeBoids(Math.floor(this.totalPredators / 2), this.predators);
       this.removeBoids(Math.floor(this.totalBoids / 2), this.boids);
+    } else if ( this.lowFPSAction == 'SuperPredator' ) {
+      this.summonSuperPredator();
     }
   }
 

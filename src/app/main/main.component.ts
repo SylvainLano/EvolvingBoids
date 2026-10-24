@@ -26,7 +26,8 @@ interface Inspection {
   speed: string;
   endurance: string | null;   // a slow boid is bigger, its energy lasts longer (with plankton), a slow predator lasts longer without eating
   fertility: string;
-  vision: string | null;      // how far a boid sees the predators, or a predator the boids
+  vision: string | null;      // how far a boid sees the predators, or a predator the boids, and how wide
+  focus: string | null;       // with a field of view narrower than all around
   lifeLabel: string;
   life: string;
   energy: string | null;      // regular boids, with plankton
@@ -542,8 +543,10 @@ export class MainComponent implements OnInit, OnDestroy {
 
     // The card stays inside the window, and where it was while the mouse is still
     const cardWidth = 230;
-    const cardHeight = 150;
+    const cardHeight = 170;
     const regular = !boid.isPredator;
+    const sight = sim.sightRadius(boid);
+    const field = sim.fieldOfView(boid);
     this.inspection = {
       x: still ? this.inspection!.x : pointer.x + 16 + cardWidth > sim.width ? pointer.x - 16 - cardWidth : pointer.x + 16,
       y: still ? this.inspection!.y : pointer.y + 16 + cardHeight > sim.height ? pointer.y - 16 - cardHeight : pointer.y + 16,
@@ -557,8 +560,10 @@ export class MainComponent implements OnInit, OnDestroy {
         ? '-'
         : percent(1 - boid.genome.reproductionRate / (boid.isPredator ? sim.predatorReproductionRate : sim.boidReproductionRate)),
       vision: boid.isSuper ? null
-        : Number.isFinite(sim.sightRadius(boid)) ? `${percent(boid.genome.vision - 1)} (${Math.round(sim.sightRadius(boid))} px)`
+        : Number.isFinite(sight) ? `${percent(boid.genome.vision - 1)} (${Math.round(sight)} px, ${field >= 360 ? 'all around' : `${Math.round(field)}°`})`
         : 'the whole screen',
+      focus: boid.isSuper || !Number.isFinite(sight) || (boid.isPredator ? sim.predatorFieldOfView : sim.boidFieldOfView) >= 360 ? null
+        : `${percent(boid.genome.focus - 1)} (${boid.genome.focus >= 1 ? 'narrower, farther' : 'wider, closer'})`,
       lifeLabel,
       life,
       energy: sim.foodEnabled && regular ? `${Math.round(boid.energy * 100)} %` : null,
@@ -640,14 +645,45 @@ export class MainComponent implements OnInit, OnDestroy {
       x = point.x < screenWidth / 2 ? point.x + margin : point.x - margin - width;
       y = point.y < screenHeight / 2 ? point.y + margin : point.y - margin - height;
     }
-    // Inside the window, below the tool bar
-    this.explanationPosition = {
+    // Inside the window, below the tool bar, and beside the panel and the charts
+    const inside = () => ({
       x: Math.min(screenWidth - width - 10, Math.max(10, x)),
       y: Math.min(screenHeight - height - 10, Math.max(60, y)),
-    };
-    if ( this.explained !== null ) {
-      this.explained.bubble = { ...this.explanationPosition, width, height };
+    });
+    ({ x, y } = inside());
+    if ( current.anchor !== 'charts' ) {
+      ({ x, y } = this.besideInterface({ x, y, width, height }));
+      ({ x, y } = inside());
     }
+    this.explanationPosition = { x, y };
+    if ( this.explained !== null ) {
+      this.explained.bubble = { x, y, width, height };
+    }
+  }
+
+  // A bubble never covers the panel nor the charts: it moves beside them when there is room, otherwise below or above them
+  private besideInterface(bubble: { x: number, y: number, width: number, height: number }): Point {
+    const gap = 12;
+    let { x, y } = bubble;
+    const overlaps = (rect: DOMRect | undefined) => rect !== undefined && rect.width > 0
+      && x < rect.right && x + bubble.width > rect.left && y < rect.bottom && y + bubble.height > rect.top;
+    const panel = (this.el.nativeElement.querySelector('app-options .panel') as HTMLElement | null)?.getBoundingClientRect();
+    if ( panel && overlaps(panel) ) {
+      if ( panel.right + gap + bubble.width <= this.sim.width - 10 ) {
+        x = panel.right + gap;
+      } else {
+        y = panel.bottom + gap;
+      }
+    }
+    const charts = this.displayCharts ? this.chartCanvas.nativeElement.getBoundingClientRect() : undefined;
+    if ( charts && overlaps(charts) ) {
+      if ( charts.left - gap - bubble.width >= 10 ) {
+        x = charts.left - gap - bubble.width;
+      } else {
+        y = charts.top - gap - bubble.height;
+      }
+    }
+    return { x, y };
   }
 
   // The user read the bubble: the next one comes right away
@@ -730,7 +766,11 @@ export class MainComponent implements OnInit, OnDestroy {
       { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount, shape: this.boidShape },
       this.mutantHalos,
       this.inspectedBoid === null ? null
-        : { boid: this.inspectedBoid, sight: Number.isFinite(sim.sightRadius(this.inspectedBoid)) ? sim.sightRadius(this.inspectedBoid) : null },
+        : {
+          boid: this.inspectedBoid,
+          sight: Number.isFinite(sim.sightRadius(this.inspectedBoid)) ? sim.sightRadius(this.inspectedBoid) : null,
+          field: sim.fieldOfView(this.inspectedBoid),
+        },
       this.explained,
       {
         food: sim.foodEnabled

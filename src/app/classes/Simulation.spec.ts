@@ -1,13 +1,14 @@
 import { Simulation } from './Simulation';
 import type { Boid } from './Boid';
 
-// A world without anybody, nor reinforcements, to place the boids by hand
+// A world without anybody, nor reinforcements, nor algae, to place the boids by hand
 function emptySimulation(): Simulation {
   const sim = new Simulation();
   sim.numberOfBoids = 0;
   sim.numberOfPredators = 0;
   sim.simulationMode = 'Continued';
   sim.initialize(800, 600);
+  sim.plants.plants = [];
   return sim;
 }
 
@@ -108,7 +109,8 @@ describe('Simulation', () => {
     sim.foodEnabled = false;
     const predator = addBoid(sim, 100, 300, 2.5, 0, true);
     predator.genome.vision = 1;
-    const far = addBoid(sim, 100 + sim.predatorSight + 60, 300);
+    predator.genome.focus = 1;
+    const far = addBoid(sim, 100 + sim.sightRadius(predator) + 60, 300);
     steps(sim, 10);
     expect(predator.preyLink).toBeNull();
     expect(Math.hypot(predator.velocity.x, predator.velocity.y)).toBeLessThan(predator.genome.maxVelocity * 0.9);
@@ -163,6 +165,7 @@ describe('Simulation', () => {
   it('should let a predator give up a chase that makes no progress, and chase another prey', () => {
     const sim = emptySimulation();
     sim.foodEnabled = false;
+    sim.predatorFieldOfView = 360;
     const events: string[] = [];
     sim.onEvent = (event) => events.push(event.type);
     const predator = addBoid(sim, 300, 300, 0, 0, true);
@@ -204,14 +207,14 @@ describe('Simulation', () => {
   it('should give the reinforcements of an extinct species the genes of its last dead', () => {
     const sim = emptySimulation();
     const dead = addBoid(sim, 100, 100);
-    dead.genome = { maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, lineage: 0.5 };
+    dead.genome = { maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, lineage: 0.5 };
     dead.generation = 7;
     sim.rememberGenes(dead);
     sim.boids = [];
     const heritages = sim.inheritGenes(false, 10);
     for (const heritage of heritages) {
       expect(heritage.generation).toBe(7);
-      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, lineage: 0.5 });
+      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, lineage: 0.5 });
       expect(heritage.genome).not.toBe(dead.genome);
     }
   });
@@ -304,6 +307,71 @@ describe('Simulation', () => {
     };
     expect(fleeing(1.5)).toBeLessThan(0);
     expect(fleeing(1)).toBe(0);
+  });
+
+  it('should let a boid see the predators ahead and aside, but not in its blind spot behind it', () => {
+    const fleeing = (predatorX: number, field: number) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      sim.boidFieldOfView = field;
+      const boid = addBoid(sim, 300, 300, 1, 0);
+      boid.genome.vision = 1;
+      boid.genome.focus = 1;
+      const predator = addBoid(sim, predatorX, 300, 0, 0, true);
+      predator.reproductionCooldown = 1000;
+      sim.step();
+      // A boid fleeing has no quiet time
+      return boid.predationCounter === 0;
+    };
+    expect(fleeing(340, 270)).toBe(true);
+    expect(fleeing(260, 270)).toBe(false);
+    expect(fleeing(260, 360)).toBe(true);
+  });
+
+  it('should share the field of view between width and length with the focus gene, for the same surface', () => {
+    const sim = emptySimulation();
+    const boid = addBoid(sim, 300, 300, 1, 0);
+    boid.genome.vision = 1;
+    boid.genome.focus = 1;
+    const usual = { field: sim.fieldOfView(boid), sight: sim.sightRadius(boid) };
+    expect(usual.field).toBe(sim.boidFieldOfView);
+    expect(usual.sight).toBeGreaterThan(sim.fleeRadius);
+    boid.genome.focus = 1.5;
+    expect(sim.fieldOfView(boid)).toBeLessThan(usual.field);
+    expect(sim.sightRadius(boid)).toBeGreaterThan(usual.sight);
+    expect(sim.fieldOfView(boid) * sim.sightRadius(boid) ** 2).toBeCloseTo(usual.field * usual.sight ** 2);
+  });
+
+  it('should let a predator see the boids ahead of it only', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    const predator = addBoid(sim, 400, 300, 2, 0, true);
+    predator.genome.vision = 1;
+    predator.genome.focus = 1;
+    addBoid(sim, 300, 300);
+    sim.step();
+    expect(predator.preyLink).toBeNull();
+    const ahead = addBoid(sim, 520, 300);
+    sim.step();
+    expect(predator.preyLink).toBe(ahead);
+  });
+
+  it('should call a Super Predator when the boids crowd the screen, only one at a time', () => {
+    const crowded = (deusExMachina: boolean) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      sim.deusExMachina = deusExMachina;
+      const events: string[] = [];
+      sim.onEvent = (event) => events.push(event.type);
+      const crowd = sim.width * sim.height / sim.areaPerBoid * sim.deusExMachinaCrowding;
+      for (let i = 0; i < crowd + 5; i++) {
+        addBoid(sim, 50 + (i * 37) % 700, 50 + Math.floor(i / 19) * 25);
+      }
+      steps(sim, 10);
+      return { called: events.filter(type => type === 'deusExMachina').length, hunting: sim.predators.filter(p => p.isSuper).length };
+    };
+    expect(crowded(true)).toEqual({ called: 1, hunting: 1 });
+    expect(crowded(false)).toEqual({ called: 0, hunting: 0 });
   });
 
   it('should make good eyes cost energy', () => {

@@ -222,6 +222,8 @@ export class Explainer {
         return { id: 'reinforcement', anchor: boid, text: `Only a few ${boid.isPredator ? 'predators' : 'boids'} were left: newcomers arrive from the borders, carrying the genes of their population.` };
       case 'superPredator':
         return { id: 'superPredator', anchor: boid, text: 'A Super Predator: it hunts boids and predators alike for 45 seconds, and the predators flee it too.' };
+      case 'deusExMachina':
+        return { id: 'deusExMachina', anchor: boid, text: 'Deus Ex Machina: the boids were crowding the screen, so a Super Predator came to thin them out. It hunts for 45 seconds, then fades away.' };
       default:
         return null;
     }
@@ -239,6 +241,7 @@ export class Explainer {
         change: child.genome.vision / parent.genome.vision - 1,
         words: child.isPredator ? ['sees the boids from farther away', 'sees the boids from closer'] : ['sees the predators from farther away', 'sees the predators from closer'],
       },
+      { change: child.genome.focus / parent.genome.focus - 1, words: ['looks narrower but farther', 'looks wider but closer'] },
     ];
     const largest = changes.reduce((best, gene) => Math.abs(gene.change) > Math.abs(best.change) ? gene : best);
     return largest.change >= 0 ? largest.words[0] : largest.words[1];
@@ -315,6 +318,13 @@ export class Explainer {
       candidates.push({ id: 'flee', anchor: chased, text: 'This boid is chased by a predator: it flees, its neighbors flee too, and the whole flock swerves.' });
     }
 
+    // A boid chased by a predator it can't see, in its blind spot behind it
+    const surprised = boids.find(boid => seen(boid) && boid.preyLink !== null && !sim.inFieldOfView(boid, boid.preyLink.position)
+      && sim.calculateDistanceSquared(boid.position, boid.preyLink.position) < sim.sightRadius(boid) ** 2);
+    if (surprised) {
+      candidates.push({ id: 'blindSpot', anchor: surprised, text: 'This boid doesn\'t see the predator coming from behind: like fish, boids have a blind spot at the back. Their field of view is wide, but not all around.' });
+    }
+
     // The richest plankton on the screen
     const plankton = sim.foodEnabled ? this.richestPlankton(sim) : null;
     if (plankton !== null) {
@@ -359,6 +369,14 @@ export class Explainer {
     const watchful = boids.find(boid => seen(boid) && boid.genome.vision >= 1.15);
     if (watchful) {
       candidates.push({ id: 'vision', anchor: watchful, text: 'This boid sees the predators from far away and flees sooner, but good eyes cost energy. Hold Shift over a boid to see how far it sees.' });
+    }
+
+    // A boid looking narrow and far, or wide and close
+    const focused = sim.boidFieldOfView < 360 ? boids.find(boid => seen(boid) && Math.abs(boid.genome.focus - 1) >= 0.15) : undefined;
+    if (focused) {
+      candidates.push({ id: 'focus', anchor: focused, text: focused.genome.focus > 1
+        ? 'This boid looks narrow but far: it sees the predators coming from farther ahead, but its blind spot is larger. Hold Shift over it to see its field of view.'
+        : 'This boid looks wide but close: it sees the predators coming from aside and almost from behind, but later. Hold Shift over it to see its field of view.' });
     }
 
     // The part of a wall close to a boid

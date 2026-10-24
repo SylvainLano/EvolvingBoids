@@ -76,7 +76,7 @@ export class CanvasRenderer {
   // Groups are drawn in order, so the last one is on top
   // The inspected boid is circled, with how far it sees when its sight is limited
   render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[],
-    highlighted: { boid: Boid, sight: number | null } | null, explained: Explained | null, world: WorldDrawing) {
+    highlighted: { boid: Boid, sight: number | null, field: number } | null, explained: Explained | null, world: WorldDrawing) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
     const now = performance.now();
@@ -145,10 +145,10 @@ export class CanvasRenderer {
 
     ctx.globalCompositeOperation = 'source-over';
     if (highlighted !== null) {
-      this.drawHighlight(highlighted.boid, highlighted.sight, options.darkMode);
+      this.drawHighlight(highlighted.boid, highlighted.sight, highlighted.field, options.darkMode);
     }
     if (explained !== null) {
-      this.drawExplained(explained, now);
+      this.drawExplained(explained, now, options.darkMode);
     }
     if (world.eraser !== null) {
       this.drawEraser(world.eraser.position, world.eraser.radius, options.darkMode);
@@ -254,20 +254,29 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
-  // A circle around the inspected boid, and a dashed one as far as it sees the predators
-  private drawHighlight(boid: Boid, sight: number | null, darkMode: boolean) {
+  // A circle around the inspected boid, and a dashed line as far as it sees: a circle, or a cone around where it swims
+  private drawHighlight(boid: Boid, sight: number | null, field: number, darkMode: boolean) {
     const ctx = this.ctx;
+    const { x, y } = boid.position;
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)';
     ctx.beginPath();
-    ctx.arc(boid.position.x, boid.position.y, this.bodyLength(boid) * 1.6, 0, Math.PI * 2);
+    ctx.arc(x, y, this.bodyLength(boid) * 1.6, 0, Math.PI * 2);
     ctx.stroke();
     if (sight !== null) {
       ctx.lineWidth = 1;
       ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.3)';
       ctx.setLineDash([4, 5]);
       ctx.beginPath();
-      ctx.arc(boid.position.x, boid.position.y, sight, 0, Math.PI * 2);
+      if (field >= 360) {
+        ctx.arc(x, y, sight, 0, Math.PI * 2);
+      } else {
+        const heading = Math.atan2(boid.velocity.y, boid.velocity.x);
+        const half = field / 2 * Math.PI / 180;
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, sight, heading - half, heading + half);
+        ctx.closePath();
+      }
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -275,7 +284,7 @@ export class CanvasRenderer {
 
   // A gently pulsing amber ring around what a bubble explains: a boid, or a whole area with a dashed line,
   // and a thin line from the bubble to the ring, when they are apart
-  private drawExplained(explained: Explained, now: number) {
+  private drawExplained(explained: Explained, now: number, darkMode: boolean) {
     const ctx = this.ctx;
     const subject = explained.subject;
     const pulse = 1 + 0.1 * Math.sin(now / 250);
@@ -306,7 +315,7 @@ export class CanvasRenderer {
       return;
     }
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+    ctx.strokeStyle = darkMode ? 'rgba(251, 191, 36, 0.55)' : 'rgba(217, 119, 6, 0.6)';
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(center.x + (from.x - center.x) * radius / distance, center.y + (from.y - center.y) * radius / distance);

@@ -9,6 +9,7 @@ const SETTINGS = [
   'simulationMode', 'numberOfBoids', 'numberOfPredators', 'predatorReproductionChances', 'predatorStarvationModificator',
   'fertileAreas', 'foodEnabled', 'seasonsEnabled', 'yearDuration', 'winterFood', 'pauseSimulation',
   'plantsEnabled', 'summerAreas', 'starvationThreshold', 'preyPerPredator', 'boidReproductionChances', 'predatorSight', 'foodRegrowthRate',
+  'boidFieldOfView', 'predatorFieldOfView', 'deusExMachina',
 ] as const;
 type ChallengeSettings = Partial<Pick<Simulation, typeof SETTINGS[number]>>;
 
@@ -34,7 +35,7 @@ export function clock(seconds: number): string {
 // The rules of the simulation the challenges were balanced with: they stay the same when the simulation gets new features
 const BALANCED_RULES = {
   plantsEnabled: false, summerAreas: 0, starvationThreshold: 1000, preyPerPredator: 0, boidReproductionChances: 30,
-  predatorSight: 0, foodRegrowthRate: 0.0005,
+  predatorSight: 0, foodRegrowthRate: 0.0005, boidFieldOfView: 360, predatorFieldOfView: 360, deusExMachina: false,
 } as const;
 
 const livingBoids = (sim: Simulation) => sim.boids.filter(boid => !boid.isDead).length;
