@@ -14,6 +14,7 @@ import { Simulation } from '../classes/Simulation';
 import { Challenge, ChallengeRunner, clock } from '../classes/Challenges';
 import { Tool } from '../classes/Tool';
 import { Explainer, ExplanationArea, isArea } from '../classes/Explainer';
+import { SharedLink, UserSettings, linkKeys, linkQuery, parseLink, placeLines, shareLines } from '../classes/Settings';
 
 type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
 
@@ -61,10 +62,16 @@ export class MainComponent implements OnInit, OnDestroy {
   displayQuadtreeCount = true;
   displayFPSCount = false;
   displayBoidCount = true;
-  displayCharts = true;                         // live charts of the populations, of the plankton and of the average genes
+  displayCharts = !MainComponent.isNarrow();    // live charts of the populations, of the plankton and of the average genes, hidden at first on a phone
   readonly optionsPanels: OptionsPanel[] = ['Simulation', 'Display', 'Boids', 'Predator', 'Challenges'];
   openOptions: OptionsPanel | null = null;      // only one panel of options is open at a time
   finalQuadtreeList: Quadtree[] = [];
+
+  // The settings of the options are remembered in the browser, and shared by a link with the walls and currents
+  readonly settings: UserSettings;
+  linkCopied = false;                           // the Share button tells for a while that the link was copied
+  readonly linkCopiedDuration = 2500;
+  private pendingLines: { walls: Point[][], currents: Point[][] } | null = null;   // the lines of a link, until the size of the screen is known
 
   // Speed: the simulation advances by fixed steps, so its speed doesn't depend on the screen refresh rate
   timeScale = 1;                                // number of simulated seconds per real second
@@ -120,6 +127,8 @@ export class MainComponent implements OnInit, OnDestroy {
   @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
 
   constructor(private el: ElementRef, private cdr: ChangeDetectorRef) {
+    // Created once every field has its default value
+    this.settings = new UserSettings({ view: this, sim: this.sim });
     this.sim.onEvent = (event) => {
       // A ring spreads around each newborn mutant, in real time so it stays visible when the simulation is sped up
       if ( event.type === 'mutant' ) {
@@ -134,15 +143,25 @@ export class MainComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.canvasRenderer = new CanvasRenderer(this.boidCanvas.nativeElement);
     this.chartRenderer = new ChartRenderer(this.chartCanvas.nativeElement);
+
+    // The settings of the last visit, or those of a shared link
+    this.settings.load();
     this.restart();
+    const link = parseLink(window.location.search);
+    if ( link !== null ) {
+      this.openLink(link);
+      this.forgetLink();
+    }
 
     // Angular runs without zone.js: the animation loop and these listeners don't trigger any change detection
     // at each frame or mouse move, the view is refreshed on demand in render()
-    this.listen(document, 'mousemove', (event: MouseEvent) => this.handleMouseMove(event));
+    // The pointer events come from a mouse, a finger or a pen alike
+    this.listen(document, 'pointermove', (event: PointerEvent) => this.handleMouseMove(event));
     this.listen(document, 'click', (event: MouseEvent) => this.handleMouseClick(event));
-    this.listen(document, 'mousedown', (event: MouseEvent) => this.handleMouseDown(event));
-    this.listen(window, 'mouseup', () => this.handleMouseUp());
-    this.listen(document.documentElement, 'mouseleave', () => this.sim.mousePosition = this.pointerPosition = null);
+    this.listen(document, 'pointerdown', (event: PointerEvent) => this.handleMouseDown(event));
+    this.listen(window, 'pointerup', (event: PointerEvent) => this.handleMouseUp(event));
+    this.listen(window, 'pointercancel', (event: PointerEvent) => this.handleMouseUp(event));
+    this.listen(document.documentElement, 'pointerleave', () => this.sim.mousePosition = this.pointerPosition = null);
     this.listen(document, 'keydown', (event: KeyboardEvent) => this.handleKeyDown(event));
     this.listen(document, 'keyup', (event: KeyboardEvent) => {
       if ( event.key === 'Shift' ) {
@@ -208,6 +227,63 @@ export class MainComponent implements OnInit, OnDestroy {
     this.openOptions = this.openOptions === panel ? null : panel;
   }
 
+  // A shared link starts its challenge, which comes with its own settings,
+  // or replaces the settings of the user and gives a new world with its walls and currents
+  openLink(link: SharedLink) {
+    if ( link.challenge !== null ) {
+      const challenge = this.challenges.challenges.find(item => item.id === link.challenge);
+      if ( challenge !== undefined ) {
+        this.startChallenge(challenge);
+      }
+      return;
+    }
+    this.challenges.close();
+    this.settings.apply({ ...this.settings.defaults, ...link.settings });
+    this.sim.clearDrawings();
+    this.restart();
+    this.pendingLines = { walls: link.walls, currents: link.currents };
+  }
+
+  // The address forgets what it shared: a reload keeps the settings, remembered, but not the walls nor the currents,
+  // like the ones drawn by hand
+  private forgetLink() {
+    const url = new URL(window.location.href);
+    for (const key of linkKeys) {
+      url.searchParams.delete(key);
+    }
+    history.replaceState(history.state, '', url);
+  }
+
+  // A link to these settings, walls and currents, or to the running challenge, copied to the clipboard
+  share() {
+    const { width, height } = this.sim;
+    const query = linkQuery({
+      settings: this.settings.changes(),
+      walls: shareLines(this.sim.obstacles.polylines, width, height),
+      currents: shareLines(this.sim.currents.polylines, width, height),
+      challenge: this.challenges.active?.id ?? null,
+    });
+    // The address of the site without index.html, the one known by the search engines
+    const page = window.location.pathname.replace(/index\.html$/, '');
+    const url = `${window.location.origin}${page}${query === '' ? '' : '?' + query}`;
+    // The clipboard is only available on a secure page (https or localhost), the link is shown otherwise
+    const copy = navigator.clipboard?.writeText(url) ?? Promise.reject();
+    copy.then(
+      () => {
+        this.linkCopied = true;
+        setTimeout(() => this.linkCopied = false, this.linkCopiedDuration);
+      },
+      () => window.prompt('Copy this link to share these settings:', url),
+    );
+  }
+
+  // Back to the default settings, after a confirmation as they are remembered: the walls and currents stay, Clear removes them
+  askToReset() {
+    if ( window.confirm('Reset all the settings to their default values?') ) {
+      this.settings.reset();
+    }
+  }
+
   toggleExplain() {
     this.explainer.setEnabled(!this.explainer.enabled, performance.now(), this.sim, this.displayCharts);
     if ( this.explainGlows ) {
@@ -218,6 +294,11 @@ export class MainComponent implements OnInit, OnDestroy {
         // Not remembered: the button will glow again on the next visit
       }
     }
+  }
+
+  // A phone, where the charts would cover a large part of the screen
+  private static isNarrow(): boolean {
+    return window.matchMedia('(max-width: 600px)').matches;
   }
 
   // Whether the visitor already used the Explain mode, the browser may refuse to tell (private browsing...)
@@ -311,6 +392,8 @@ export class MainComponent implements OnInit, OnDestroy {
     }
     this.mousePressed = true;
     const point = { x: event.clientX, y: event.clientY };
+    // A finger is only known once it touches the screen
+    this.pointerPosition = point;
     if ( this.tool === 'obstacle' || this.tool === 'current' ) {
       this.stroke = { kind: this.tool, points: [point] };
     } else {
@@ -319,7 +402,7 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   // A drawn line becomes an obstacle or a current when the mouse is released
-  handleMouseUp() {
+  handleMouseUp(event?: PointerEvent) {
     if ( this.stroke !== null ) {
       const points = this.stroke.points;
       const last = points[points.length - 1];
@@ -330,11 +413,15 @@ export class MainComponent implements OnInit, OnDestroy {
       this.stroke = null;
     }
     this.mousePressed = false;
+    // A lifted finger is gone: it doesn't scare the boids anymore
+    if ( event?.pointerType === 'touch' ) {
+      this.sim.mousePosition = this.pointerPosition = null;
+    }
   }
 
   handleMouseClick(event: MouseEvent) {
     if ( this.demo.active ) {
-      this.demo.onMouseMove();
+      this.demo.onClick();
       return;
     }
     // During a challenge, some tools can only be used a few times
@@ -412,7 +499,7 @@ export class MainComponent implements OnInit, OnDestroy {
       lifeLabel = 'Lifetime';
       life = `${seconds(boid.age)} s / ${sim.superPredatorLifetime} s`;
     } else if ( boid.isPredator ) {
-      const starvation = sim.starvationThreshold * ( 11 + +sim.predatorStarvationModificator )/10 * boid.geneCost;
+      const starvation = sim.starvationThreshold * ( 11 + sim.predatorStarvationModificator )/10 * boid.geneCost;
       lifeLabel = 'Hunger';
       life = boid.reproductionCooldown > 0 ? 'digesting' : `${Math.round(100 * boid.predationCounter / starvation)} %`;
     } else {
@@ -508,6 +595,13 @@ export class MainComponent implements OnInit, OnDestroy {
       this.sim.resize(width, height);
     }
 
+    // The lines of a shared link are placed once the size of the screen is known
+    if ( this.pendingLines !== null && this.sim.width > 0 ) {
+      placeLines(this.pendingLines.walls, this.sim.width, this.sim.height).forEach(line => this.sim.obstacles.add(line));
+      placeLines(this.pendingLines.currents, this.sim.width, this.sim.height).forEach(line => this.sim.currents.add(line));
+      this.pendingLines = null;
+    }
+
     if ( this.mousePressed && this.pointerPosition !== null && !this.demo.active ) {
       this.applyHeldTool(this.pointerPosition);
     }
@@ -581,6 +675,10 @@ export class MainComponent implements OnInit, OnDestroy {
     // While inspecting, the card follows the mouse at each frame too
     if (this.renderer === 'dom' || this.inspection !== null || timestamp - this.lastUiRefresh >= this.uiRefreshInterval) {
       this.lastUiRefresh = timestamp;
+      // The settings of the user are remembered as they change, not the ones of the demo or of a challenge
+      if ( !this.demo.active && this.challenges.active === null ) {
+        this.settings.save();
+      }
       this.cdr.detectChanges();
     }
 

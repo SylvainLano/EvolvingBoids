@@ -421,7 +421,7 @@ export class Simulation {
 
     if ( boid.reproductionCooldown == 0 ) {
 
-      if (boid.predationCounter >= ( this.starvationThreshold * ( 11 + +this.predatorStarvationModificator )/10 * boid.geneCost ) ) {
+      if (boid.predationCounter >= ( this.starvationThreshold * ( 11 + this.predatorStarvationModificator )/10 * boid.geneCost ) ) {
         this.kill(boid, 'predatorStarved');
       } else {
 

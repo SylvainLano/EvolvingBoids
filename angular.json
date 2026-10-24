@@ -24,6 +24,8 @@
             "inlineStyleLanguage": "sass",
             "assets": [
               "src/favicon.ico",
+              "src/favicon.svg",
+              "src/apple-touch-icon.png",
               "src/assets"
             ],
             "styles": [

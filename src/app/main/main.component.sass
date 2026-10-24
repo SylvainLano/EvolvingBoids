@@ -1,10 +1,12 @@
 /* main.component.sass */
+// The fingers draw and scare the boids, they don't scroll nor zoom the page
 .main-container
   position: fixed
   width: 100vw
   height: 100vh
   top: 0
   left: 0
+  touch-action: none
 
 .main-container-dark
   background-color: #0f172a
@@ -76,6 +78,11 @@
   &:hover
     opacity: 1
 
+.tool-group
+  display: flex
+  flex-shrink: 0
+  gap: 4px
+
 .tool-bar-light
   background-color: rgba(255, 255, 255, 0.85)
   border: 1px solid lightgrey
@@ -123,6 +130,10 @@
   opacity: 0.3
   cursor: not-allowed
 
+// Wide enough for "Copied!", so the tool bar doesn't move
+.tool-share
+  min-width: 10ch
+
 .tool-separator
   width: 1px
   margin: 3px 6px
@@ -155,6 +166,7 @@
   z-index: 9
   box-sizing: border-box
   width: 400px
+  max-width: calc(100vw - 20px)
   padding: 12px 16px 14px
   border-radius: 10px
   border-left: 4px solid #fbbf24
@@ -328,9 +340,10 @@
 .demo-visible
   opacity: 0.6
 
+// Below the tool bar, which has the top of the screen for itself
 .display-container
   position: relative
-  top: 10px
+  top: 50px
   left: 30px
   font-family: Monaco, monospace
   user-select: none
@@ -426,3 +439,47 @@
 
 .simulation-red-light
   color: darkred
+// A touch screen has no keyboard for the keys of the tools, and no mouse to hover the faded interface
+@media (hover: none)
+  .tool-key
+    display: none
+
+  .tool-bar
+    opacity: 1
+
+  .form-container
+    opacity: 0.8
+
+// On a narrow screen, the tool bar spans the width and scrolls sideways, with the actions first,
+// and the challenge card and the charts take the bottom of the screen
+@media (max-width: 840px)
+  .tool-bar
+    left: 10px
+    right: 10px
+    transform: none
+    width: auto
+    overflow-x: auto
+    scrollbar-width: none
+
+  .tool-actions
+    order: -2
+
+  .tool-separator
+    order: -1
+
+  .display-container
+    left: 12px
+
+@media (max-width: 600px)
+  .challenge-card
+    top: auto
+    bottom: 10px
+    left: 10px
+    right: 10px
+    width: auto
+
+  .chart-canvas
+    right: 10px
+    bottom: 10px
+    width: calc(100vw - 20px)
+    height: 200px

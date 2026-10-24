@@ -157,6 +157,15 @@ export class DemoMode {
     this.lastMouseMove = performance.now();
   }
 
+  // A click or a tap shows how to exit, a second one while it is shown exits: a phone has no key to do it
+  onClick() {
+    if (this.showHint) {
+      this.stop();
+    } else {
+      this.onMouseMove();
+    }
+  }
+
   // The wake lock is released by the browser when the page is hidden
   onVisibilityChange() {
     if (this.active && document.visibilityState === 'visible') {

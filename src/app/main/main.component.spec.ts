@@ -1,12 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { MainComponent } from './main.component';
+import { UserSettings, encodeLines, parseLink } from '../classes/Settings';
 
 describe('MainComponent', () => {
   let component: MainComponent;
   let fixture: ComponentFixture<MainComponent>;
 
   beforeEach(async () => {
+    // Each test starts with the default settings, nothing remembered by the previous ones
+    localStorage.removeItem(UserSettings.storageKey);
     await TestBed.configureTestingModule({
       imports: [MainComponent],
     })
@@ -83,6 +86,63 @@ describe('MainComponent', () => {
     component.demo.stop();
     expect(component.darkMode).toBe(false);
     expect(component.drawQuadtree).toBe(true);
+  });
+
+  it('should draw a wall with a finger, and forget the finger once lifted', () => {
+    const touch = (type: string, x: number, y: number) => new PointerEvent(type, { clientX: x, clientY: y, pointerType: 'touch' });
+    component.selectTool('obstacle');
+    component.handleMouseDown(touch('pointerdown', 100, 100));
+    component.handleMouseMove(touch('pointermove', 200, 100));
+    component.handleMouseUp(touch('pointerup', 200, 100));
+    expect(component.sim.obstacles.polylines.length).toBe(1);
+
+    component.selectTool('predator');
+    component.handleMouseMove(touch('pointermove', 300, 300));
+    expect(component.sim.mousePosition).toEqual({ x: 300, y: 300 });
+    component.handleMouseUp(touch('pointerup', 300, 300));
+    expect(component.sim.mousePosition).toBeNull();
+  });
+
+  it('should leave the demo with a second click, the first one showing how to exit', () => {
+    component.demo.start(false);
+    component.handleMouseClick(new MouseEvent('click'));
+    component.demo.update(performance.now());
+    expect(component.demo.active).toBe(true);
+    expect(component.demo.showHint).toBe(true);
+    component.handleMouseClick(new MouseEvent('click'));
+    expect(component.demo.active).toBe(false);
+  });
+
+  it('should remember the settings for the next visit, until they are reset', () => {
+    component.darkMode = false;
+    component.sim.fertileAreas = 1;
+    component.settings.save();
+    fixture.destroy();
+    const next = TestBed.createComponent(MainComponent);
+    next.detectChanges();
+    expect(next.componentInstance.darkMode).toBe(false);
+    expect(next.componentInstance.sim.fertileAreas).toBe(1);
+    next.componentInstance.settings.reset();
+    expect(next.componentInstance.darkMode).toBe(true);
+    expect(next.componentInstance.sim.fertileAreas).toBe(3);
+    next.destroy();
+  });
+
+  it('should open a shared link: its settings, then its walls once the screen has a size', () => {
+    component.sim.boidLifespan = 300;
+    component.openLink(parseLink('?darkMode=false&walls=' + encodeLines([[{ x: 0.1, y: 0.5 }, { x: 0.9, y: 0.5 }]]))!);
+    expect(component.darkMode).toBe(false);
+    expect(component.sim.boidLifespan).toBe(180);
+    component['frame'](performance.now());
+    expect(component.sim.obstacles.polylines.length).toBe(1);
+    expect(component.sim.obstacles.polylines[0][1].x).toBeCloseTo(component.sim.width * 0.9, 0);
+  });
+
+  it('should start a shared challenge, without changing the settings of the user', () => {
+    component.darkMode = false;
+    component.openLink(parseLink('?challenge=fortress')!);
+    expect(component.challenges.active?.id).toBe('fortress');
+    expect(component.darkMode).toBe(false);
   });
 
   it('should stop listening to the page once destroyed', () => {

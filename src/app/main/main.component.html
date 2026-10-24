@@ -70,22 +70,30 @@
         </div>
     }
     <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle">{{ demo.sceneTitle }}</div>
-    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Press D or Esc to exit the demo</div>
+    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint">Click again, or press D or Esc, to exit the demo</div>
 </div>
 
 <div class="tool-bar" [class.demo-hidden]="demo.active" [class.tool-bar-attention]="explainGlows" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">
-    @for (item of tools; track item.id; let i = $index) {
-        <button type="button" class="tool-button"
-            [class.tool-selected]="tool === item.id" [title]="challenges.isAllowed(item.id) ? item.title : 'Not allowed during this challenge'"
-            [disabled]="!challenges.isAllowed(item.id)" (click)="selectTool(item.id)">
-            <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
-        </button>
-    }
-    <!-- Not tools, but actions -->
+    <span class="tool-group">
+        @for (item of tools; track item.id; let i = $index) {
+            <button type="button" class="tool-button"
+                [class.tool-selected]="tool === item.id" [title]="challenges.isAllowed(item.id) ? item.title : 'Not allowed during this challenge'"
+                [disabled]="!challenges.isAllowed(item.id)" (click)="selectTool(item.id)">
+                <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
+            </button>
+        }
+    </span>
     <span class="tool-separator"></span>
-    <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="sim.clearDrawings()">Clear</button>
-    <button type="button" class="tool-button" [class.tool-selected]="explainer.enabled" [class.tool-glow]="explainGlows"
-        title="Explain what happens on the screen, in short bubbles (E)" (click)="toggleExplain()">Explain</button>
+    <!-- Not tools, but actions: they come first on a narrow screen -->
+    <span class="tool-group tool-actions">
+        <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="sim.clearDrawings()">Clear</button>
+        <button type="button" class="tool-button" [disabled]="challenges.active !== null" (click)="askToReset()"
+            [title]="challenges.active !== null ? 'Not allowed during this challenge' : 'Back to the default value of every option, they are remembered in this browser (Clear removes the walls and currents)'">Reset</button>
+        <button type="button" class="tool-button tool-share" (click)="share()"
+            [title]="challenges.active !== null ? 'Copy a link to this challenge' : 'Copy a link to these settings, walls and currents'">{{ linkCopied ? 'Copied!' : 'Share' }}</button>
+        <button type="button" class="tool-button" [class.tool-selected]="explainer.enabled" [class.tool-glow]="explainGlows"
+            title="Explain what happens on the screen, in short bubbles (E)" (click)="toggleExplain()">Explain</button>
+    </span>
 </div>
 
 <div class="display-container" [class.demo-hidden]="demo.active">

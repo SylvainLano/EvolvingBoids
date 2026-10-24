@@ -1,7 +1,7 @@
 # EvolvingBoids
 
 ## Description
-[Evolving Boids](https://sylvainlano.github.io/EvolvingBoids/index.html) is an Angular Boids simulation using SASS and Quadtree
+[Evolving Boids](https://sylvainlano.github.io/EvolvingBoids/) is an Angular Boids simulation using SASS and Quadtree
 
 ### The Rendering
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
@@ -29,6 +29,23 @@
 - Eraser: holding the mouse removes the boids, and the parts of the obstacles, currents and plankton, under it  
 - Food: holding the mouse sows plankton, it fades away out of the fertile areas  
 - Obstacles and currents stay when the simulation restarts, the Clear button removes them  
+
+### On a Phone or a Tablet
+- The tools work with a finger as with a mouse: a finger draws the walls and currents, and the boids flee it while it touches the screen  
+- On a narrow screen, the tool bar spans the width and scrolls sideways, with Clear, Reset, Share and Explain first. The keys of the tools are hidden on a touch screen  
+- The charts are hidden at first on a phone, they can be shown in the Display Options. The challenge card and the charts take the bottom of the screen  
+- Dragging a finger never scrolls nor zooms the page, nor reloads it  
+- The inspection of a boid needs the Shift key, it isn't available on a touch screen  
+
+### The Settings and the Sharing
+- The settings of the options are remembered in the browser, and come back on the next visit. Only the ones changed are kept: the others follow the defaults of the next versions  
+- The Reset button, next to Clear, brings every option back to its default value, after a confirmation. Clear only removes the walls and currents  
+- The Share button copies a link to the clipboard: it gives the same settings, walls and currents to whoever opens it, on a screen of any size. During a challenge, the link starts this challenge  
+- A link is short: only the changed settings are written, readable (like `?darkMode=false&boidLifespan=300`), and the walls and currents are simplified then packed in 4 characters per point  
+- Opening a link replaces the settings, which are then remembered. The address forgets the link right away: a reload keeps the settings, but not the walls and currents, like the ones drawn by hand  
+- The values of a link are checked: a number is brought back into the range of its option, anything else is ignored  
+- The settings of the demo and of the challenges are never remembered, the settings of the user come back when they end  
+- In a message, a link shows a preview: the title, a short description and a picture of the simulation. The site has its own icon, a small flock of boids  
 
 ### The Explain Mode
 - The Explain button, at the top next to the tools, or the E key, shows short bubbles about what happens on the screen, when it happens. On the first visit, the button glows and pulses to catch the eye  
@@ -59,7 +76,7 @@
 - The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
 - Scenes (Shoal, Murmuration, Fireflies, Night Hunt) follow each other every 2.5 minutes, with a smooth transition of the parameters  
 - A director keeps the ecosystem alive: new flocks and predator packs arrive from the borders when a population is low, with the genes of the current population, and reproduction stops when a population is too large or the FPS too low  
-- Moving the mouse shows how to exit: D or Esc  
+- Moving the mouse, or a click, shows how to exit: D, Esc, or a second click (a second tap on a phone)  
 
 ### The Quadtree
 - Regular Boids and Predators detection are handled by a Quadtree  
@@ -97,8 +114,10 @@
 - Angular 22, with standalone components (no NgModule nor router for this single page), zoneless change detection, the new control flow (`@if`, `@for`) and the esbuild based `@angular/build`  
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection, the options  
-- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation  
+- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation, `classes/Settings.ts` remembers the settings and writes or reads the shared links  
 - `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton  
+- `src/favicon.svg` is the icon, also drawn as `favicon.ico` (16, 32 and 48 px) and `apple-touch-icon.png` (180 px). `src/assets/preview.png` is the picture of the link previews, a capture of the demo at 1200 x 630 px, declared with absolute addresses in `index.html`  
+- `index.html` also gives the search engines the canonical address (the shared links all lead to it), a description of the application as structured data, and a short presentation for the robots and the visitors without JavaScript  
 
 ### Tests
 - `ng test` runs the unit tests: the engine (obstacles never crossed, reinforcements, energy, Super Predators...), the Quadtree, the drawn lines, the plankton, and the components  
