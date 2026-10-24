@@ -211,7 +211,7 @@ export class Explainer {
         }
         return { id: 'caught', anchor: boid, text: 'Caught! The predator digests now: it slows down and turns pale. A predator can only have a child after a meal.' };
       case 'gaveUp':
-        return { id: 'gaveUp', anchor: boid, text: 'This predator gave up: its prey turns more sharply than it can, and they were going round in circles. It looks for an easier one.' };
+        return { id: 'gaveUp', anchor: boid, text: 'This predator gave up: its prey turns more sharply than it can, and they were going round in circles. Agile boids escape this way, agile predators keep up. It looks for an easier one.' };
       case 'oldAge':
         return { id: 'oldAge', anchor: boid, text: 'This boid died of old age. Fast or fertile boids live shorter lives: every gene has a cost.' };
       case 'starved':
@@ -242,6 +242,7 @@ export class Explainer {
         words: child.isPredator ? ['sees the boids from farther away', 'sees the boids from closer'] : ['sees the predators from farther away', 'sees the predators from closer'],
       },
       { change: child.genome.focus / parent.genome.focus - 1, words: ['looks narrower but farther', 'looks wider but closer'] },
+      { change: child.genome.agility / parent.genome.agility - 1, words: ['turns more sharply', 'turns less sharply'] },
     ];
     const largest = changes.reduce((best, gene) => Math.abs(gene.change) > Math.abs(best.change) ? gene : best);
     return largest.change >= 0 ? largest.words[0] : largest.words[1];
@@ -377,6 +378,14 @@ export class Explainer {
       candidates.push({ id: 'focus', anchor: focused, text: focused.genome.focus > 1
         ? 'This boid looks narrow but far: it sees the predators coming from farther ahead, but its blind spot is larger. Hold Shift over it to see its field of view.'
         : 'This boid looks wide but close: it sees the predators coming from aside and almost from behind, but later. Hold Shift over it to see its field of view.' });
+    }
+
+    // A boid much more or less agile than the others
+    const nimble = sim.agilityGene ? boids.find(boid => seen(boid) && Math.abs(boid.genome.agility - 1) >= 0.1) : undefined;
+    if (nimble) {
+      candidates.push({ id: 'agility', anchor: nimble, text: nimble.genome.agility > 1
+        ? 'This boid is agile: it turns sharply and shakes off the predators, but it lives shorter. Against it, the agile predators keep up: an arms race.'
+        : 'This boid turns slowly: it is easier to catch, but it lives longer. Where the predators are few, agility isn\'t worth what it costs.' });
     }
 
     // The part of a wall close to a boid

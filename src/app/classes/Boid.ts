@@ -12,10 +12,11 @@ export interface Genome {
   reproductionRate: number;   // delay before being able to reproduce again (lower is more fertile)
   vision: number;             // factor of the distance at which a boid sees the predators, or a predator the boids: good eyes cost energy or hunger
   focus: number;              // how the field of view is shared between width and length: above 1 narrower and longer, below 1 wider and shorter
+  agility: number;            // factor of the turning force: an agile boid turns sharper, but lives shorter (or starves sooner)
   lineage: number;            // the mark of a family, in [-1, 1], that gives the color: it only changes with a mutation
 }
 
-export type Gene = 'maxVelocity' | 'reproductionRate' | 'vision' | 'focus';
+export type Gene = 'maxVelocity' | 'reproductionRate' | 'vision' | 'focus' | 'agility';
 
 // What a reinforcement inherits from an existing or recently dead individual
 export interface Heritage {

@@ -22,7 +22,7 @@
     <div class="messages-container" [class.demo-hidden]="demo.active">
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ sim.errorMessage }}</p>
     </div>
-    <canvas #chartCanvas class="chart-canvas" [ngClass]="darkMode ? 'chart-canvas-dark' : 'chart-canvas-light'"
+    <canvas #chartCanvas class="chart-canvas" [ngClass]="darkMode ? 'chart-canvas-dark' : 'chart-canvas-light'" (click)="nextChartPage()"
         [style.display]="displayCharts && !demo.active ? 'block' : 'none'"></canvas>
     @if (inspection !== null) {
         <div class="inspect-card" [ngClass]="darkMode ? 'inspect-card-dark' : 'inspect-card-light'"
@@ -38,6 +38,9 @@
             }
             @if (inspection.focus !== null) {
                 <div>Focus : {{ inspection.focus }}</div>
+            }
+            @if (inspection.agility !== null) {
+                <div>Agility : {{ inspection.agility }}</div>
             }
             <div>{{ inspection.lifeLabel }} : {{ inspection.life }}</div>
             @if (inspection.energy !== null) {

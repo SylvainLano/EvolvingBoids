@@ -17,6 +17,8 @@ export class ChartRenderer {
 
   private readonly padding = 10;
   private readonly titleHeight = 14;
+  private readonly footerHeight = 12;         // the name of the page, at the bottom
+  static readonly pageCount = 2;
   private readonly minVisibleSamples = 60;    // the first minute is drawn on a fixed scale, then the whole history fits the width
   private readonly minDeviationRange = 10;    // smallest range of the gene charts, in percent
 
@@ -39,7 +41,9 @@ export class ChartRenderer {
     this.ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   }
 
-  render(samples: StatsSample[], darkMode: boolean) {
+  // The genes are shown on two pages, the populations on both: the life (speed, fertility, agility), then the senses (vision, focus)
+  // A click on the charts turns the page
+  render(samples: StatsSample[], darkMode: boolean, page: number) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
@@ -53,56 +57,47 @@ export class ChartRenderer {
     const winterColor = darkMode ? 'rgba(148, 197, 255, 0.1)' : 'rgba(30, 64, 175, 0.07)';
     const winters = samples.map(s => s.winter);
 
-    const rows: { title: string, series: Series[], deviation: boolean }[] = [
+    const population = {
+      title: 'Population',
+      deviation: false,
+      series: [
+        { label: 'Boids', values: samples.map(s => s.boids), color: boidColor, unit: '' },
+        { label: 'Predators', values: samples.map(s => s.predators), color: predatorColor, unit: '' },
+        { label: 'Food', values: samples.map(s => s.food), color: foodColor, unit: '%' },
+        { label: 'Plants', values: samples.map(s => s.plants), color: plantColor, unit: '' },
+      ],
+    };
+    // A gene of both species, as a deviation from their defaults
+    const gene = (title: string, boids: (sample: StatsSample) => number, predators: (sample: StatsSample) => number) => ({
+      title,
+      deviation: true,
+      series: [
+        { label: 'Boids', values: samples.map(boids), color: boidColor, unit: '%' },
+        { label: 'Predators', values: samples.map(predators), color: predatorColor, unit: '%' },
+      ],
+    });
+    const pages: { name: string, rows: { title: string, series: Series[], deviation: boolean }[] }[] = [
       {
-        title: 'Population',
-        deviation: false,
-        series: [
-          { label: 'Boids', values: samples.map(s => s.boids), color: boidColor, unit: '' },
-          { label: 'Predators', values: samples.map(s => s.predators), color: predatorColor, unit: '' },
-          { label: 'Food', values: samples.map(s => s.food), color: foodColor, unit: '%' },
-          { label: 'Plants', values: samples.map(s => s.plants), color: plantColor, unit: '' },
-        ],
+        name: 'Life',
+        rows: [population, gene('Speed', s => s.boidSpeed, s => s.predatorSpeed), gene('Fertility', s => s.boidFertility, s => s.predatorFertility),
+          gene('Agility', s => s.boidAgility, s => s.predatorAgility)],
       },
-      {
-        title: 'Speed',
-        deviation: true,
-        series: [
-          { label: 'Boids', values: samples.map(s => s.boidSpeed), color: boidColor, unit: '%' },
-          { label: 'Predators', values: samples.map(s => s.predatorSpeed), color: predatorColor, unit: '%' },
-        ],
-      },
-      {
-        title: 'Fertility',
-        deviation: true,
-        series: [
-          { label: 'Boids', values: samples.map(s => s.boidFertility), color: boidColor, unit: '%' },
-          { label: 'Predators', values: samples.map(s => s.predatorFertility), color: predatorColor, unit: '%' },
-        ],
-      },
-      {
-        title: 'Vision',
-        deviation: true,
-        series: [
-          { label: 'Boids', values: samples.map(s => s.boidVision), color: boidColor, unit: '%' },
-          { label: 'Predators', values: samples.map(s => s.predatorVision), color: predatorColor, unit: '%' },
-        ],
-      },
-      {
-        title: 'Focus',
-        deviation: true,
-        series: [
-          { label: 'Boids', values: samples.map(s => s.boidFocus), color: boidColor, unit: '%' },
-          { label: 'Predators', values: samples.map(s => s.predatorFocus), color: predatorColor, unit: '%' },
-        ],
-      },
+      { name: 'Senses', rows: [population, gene('Vision', s => s.boidVision, s => s.predatorVision), gene('Focus', s => s.boidFocus, s => s.predatorFocus)] },
     ];
+    const shown = pages[page % pages.length];
 
-    const rowHeight = (this.height - this.padding) / rows.length;
-    rows.forEach((row, index) => {
+    const rowHeight = (this.height - this.padding - this.footerHeight) / shown.rows.length;
+    shown.rows.forEach((row, index) => {
       const top = this.padding + index * rowHeight;
       this.drawRow(row.title, row.series, row.deviation, top, rowHeight - this.padding, textColor, gridColor, winters, winterColor);
     });
+
+    // Which page this is, and how to turn it
+    ctx.font = '10px Monaco, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = textColor;
+    ctx.fillText(`${shown.name} ${page % pages.length + 1}/${pages.length} - click to turn the page`, this.width - this.padding, this.height - 4);
   }
 
   // Populations are each scaled to their own maximum, genes share a symmetric scale around the species default

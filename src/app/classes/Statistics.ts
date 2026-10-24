@@ -13,6 +13,8 @@ export interface StatsSample {
   predatorVision: number;       // NaN when the predators see the whole screen
   boidFocus: number;            // NaN when the boids see all around
   predatorFocus: number;        // NaN when the predators see the whole screen, or all around
+  boidAgility: number;          // NaN when the agility doesn't evolve
+  predatorAgility: number;
   food: number;                 // plankton compared to what the fertile areas can hold, in percent, NaN without plankton
   plants: number;               // number of algae, NaN without them
   winter: boolean;              // drawn as a band behind the charts
@@ -28,6 +30,7 @@ export interface ExpressedGenes {
   predatorVision: boolean;
   boidFocus: boolean;
   predatorFocus: boolean;
+  agility: boolean;
 }
 
 export class Statistics {
@@ -70,6 +73,8 @@ export class Statistics {
       predatorVision: expressed.predatorVision ? predatorAverages.vision : NaN,
       boidFocus: expressed.boidFocus ? boidGenes.focus : NaN,
       predatorFocus: expressed.predatorFocus ? predatorAverages.focus : NaN,
+      boidAgility: expressed.agility ? boidGenes.agility : NaN,
+      predatorAgility: expressed.agility ? predatorAverages.agility : NaN,
       food: foodRatio() * 100,
       plants,
       winter,
@@ -86,26 +91,29 @@ export class Statistics {
     }
   }
 
-  // A lower reproduction rate means a higher fertility, the vision and the focus are factors of 1 by default
-  private averageGenes(population: Boid[], defaults: SpeciesDefaults): { speed: number, fertility: number, vision: number, focus: number } {
+  // A lower reproduction rate means a higher fertility, the vision, the focus and the agility are factors of 1 by default
+  private averageGenes(population: Boid[], defaults: SpeciesDefaults): { speed: number, fertility: number, vision: number, focus: number, agility: number } {
     if (population.length === 0) {
-      return { speed: NaN, fertility: NaN, vision: NaN, focus: NaN };
+      return { speed: NaN, fertility: NaN, vision: NaN, focus: NaN, agility: NaN };
     }
     let maxVelocity = 0;
     let reproductionRate = 0;
     let vision = 0;
     let focus = 0;
+    let agility = 0;
     for (const boid of population) {
       maxVelocity += boid.genome.maxVelocity;
       reproductionRate += boid.genome.reproductionRate;
       vision += boid.genome.vision;
       focus += boid.genome.focus;
+      agility += boid.genome.agility;
     }
     return {
       speed: (maxVelocity / population.length / defaults.maxVelocity - 1) * 100,
       fertility: -(reproductionRate / population.length / defaults.reproductionRate - 1) * 100,
       vision: (vision / population.length - 1) * 100,
       focus: (focus / population.length - 1) * 100,
+      agility: (agility / population.length - 1) * 100,
     };
   }
 }

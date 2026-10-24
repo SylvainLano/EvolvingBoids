@@ -9,7 +9,7 @@ const SETTINGS = [
   'simulationMode', 'numberOfBoids', 'numberOfPredators', 'predatorReproductionChances', 'predatorStarvationModificator',
   'fertileAreas', 'foodEnabled', 'seasonsEnabled', 'yearDuration', 'winterFood', 'pauseSimulation',
   'plantsEnabled', 'summerAreas', 'starvationThreshold', 'preyPerPredator', 'boidReproductionChances', 'predatorSight', 'foodRegrowthRate',
-  'boidFieldOfView', 'predatorFieldOfView', 'deusExMachina',
+  'boidFieldOfView', 'predatorFieldOfView', 'deusExMachina', 'agilityGene',
 ] as const;
 type ChallengeSettings = Partial<Pick<Simulation, typeof SETTINGS[number]>>;
 
@@ -36,13 +36,13 @@ export function clock(seconds: number): string {
 const BALANCED_RULES = {
   plantsEnabled: false, summerAreas: 0, starvationThreshold: 1000, preyPerPredator: 0, boidReproductionChances: 30,
   predatorSight: 0, foodRegrowthRate: 0.0005, boidFieldOfView: 360, predatorFieldOfView: 360, deusExMachina: false,
+  agilityGene: false,
 } as const;
 
 const livingBoids = (sim: Simulation) => sim.boids.filter(boid => !boid.isDead).length;
 const livingPredators = (sim: Simulation) => sim.predators.filter(predator => !predator.isDead && !predator.isSuper).length;
 // Average speed of the boids compared to the default, in percent, from the last sample of the statistics
-const boidSpeed = (sim: Simulation) => sim.stats.samples.length > 0 ? sim.stats.samples[sim.stats.samples.length - 1].boidSpeed : 0;
-const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)} %`;
+const boidSpeed = (sim: Simulation) => sim.stats.samples.length > 0 ? sim.stats.samples[sim.stats.samples.length - 1].boidSpeed : 0;const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)} %`;
 
 // Survive until the end of the duration, unless the condition fails before
 function holdOn(duration: number, failed: (sim: Simulation) => boolean) {

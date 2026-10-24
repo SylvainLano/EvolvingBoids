@@ -103,6 +103,18 @@ describe('MainComponent', () => {
     expect(component.drawQuadtree).toBe(false);
   });
 
+  it('should turn the page of the charts with a click, without using the tool', () => {
+    const charts: HTMLCanvasElement = fixture.nativeElement.querySelector('.chart-canvas');
+    const predators = component.sim.predators.length;
+    component.selectTool('predator');
+    charts.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(component.chartPage).toBe(1);
+    expect(component.isOnInterface({ target: charts } as unknown as MouseEvent)).toBe(true);
+    component.nextChartPage();
+    expect(component.chartPage).toBe(0);
+    expect(component.sim.predators.length).toBe(predators);
+  });
+
   it('should restore the settings when the demo stops', () => {
     component.darkMode = false;
     component.drawQuadtree = true;

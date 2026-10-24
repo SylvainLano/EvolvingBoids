@@ -207,14 +207,14 @@ describe('Simulation', () => {
   it('should give the reinforcements of an extinct species the genes of its last dead', () => {
     const sim = emptySimulation();
     const dead = addBoid(sim, 100, 100);
-    dead.genome = { maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, lineage: 0.5 };
+    dead.genome = { maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, agility: 0.9, lineage: 0.5 };
     dead.generation = 7;
     sim.rememberGenes(dead);
     sim.boids = [];
     const heritages = sim.inheritGenes(false, 10);
     for (const heritage of heritages) {
       expect(heritage.generation).toBe(7);
-      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, lineage: 0.5 });
+      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, focus: 1.1, agility: 0.9, lineage: 0.5 });
       expect(heritage.genome).not.toBe(dead.genome);
     }
   });
@@ -386,6 +386,27 @@ describe('Simulation', () => {
     };
     expect(spent(1.5)).toBeGreaterThan(spent(1));
     expect(spent(0.5)).toBeLessThan(spent(1));
+  });
+
+  it('should let an agile boid turn sharper, and make it live shorter', () => {
+    const turn = (agility: number) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      const boid = addBoid(sim, 300, 300, 1, 0);
+      boid.genome.agility = agility;
+      boid.genome.vision = 1;
+      boid.genome.focus = 1;
+      const predator = addBoid(sim, 340, 300, 0, 0, true);
+      predator.reproductionCooldown = 1000;
+      sim.step();
+      return 1 - boid.velocity.x;
+    };
+    expect(turn(1.4)).toBeGreaterThan(turn(1));
+    const sim = emptySimulation();
+    const genome = sim.createGenome(false);
+    expect(sim.calculateGeneCost({ ...genome, agility: 1.2 }, false)).toBeLessThan(sim.calculateGeneCost({ ...genome, agility: 1 }, false));
+    sim.agilityGene = false;
+    expect(sim.calculateGeneCost({ ...genome, agility: 1.2 }, false)).toBe(sim.calculateGeneCost({ ...genome, agility: 1 }, false));
   });
 
   it('should make the slow boids bigger and more enduring, the fast ones smaller', () => {

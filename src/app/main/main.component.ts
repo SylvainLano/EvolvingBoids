@@ -28,6 +28,7 @@ interface Inspection {
   fertility: string;
   vision: string | null;      // how far a boid sees the predators, or a predator the boids, and how wide
   focus: string | null;       // with a field of view narrower than all around
+  agility: string | null;     // when it evolves
   lifeLabel: string;
   life: string;
   energy: string | null;      // regular boids, with plankton
@@ -67,6 +68,7 @@ export class MainComponent implements OnInit, OnDestroy {
   displayFPSCount = false;
   displayBoidCount = true;
   displayCharts = !MainComponent.isNarrow();    // live charts of the populations, of the plankton and of the average genes, hidden at first on a phone
+  chartPage = 0;                                // the genes of the life, or those of the senses
   readonly optionsPanels: OptionsPanel[] = ['Simulation', 'Display', 'Boids', 'Predator', 'Challenges'];
   openOptions: OptionsPanel | null = null;      // only one panel of options is open at a time
   finalQuadtreeList: Quadtree[] = [];
@@ -389,10 +391,10 @@ export class MainComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Clicks on the options or the tool bar are not meant for the tools
+  // Clicks on the options, the tool bar or the charts are not meant for the tools
   isOnInterface(event: MouseEvent): boolean {
     const target = event.target as Element | null;
-    return typeof target?.closest === 'function' && target.closest('app-options, .tool-bar, .challenge-card, .explain-bubble') !== null;
+    return typeof target?.closest === 'function' && target.closest('app-options, .tool-bar, .challenge-card, .explain-bubble, .chart-canvas') !== null;
   }
 
   // Some tools are not allowed during a challenge
@@ -543,7 +545,7 @@ export class MainComponent implements OnInit, OnDestroy {
 
     // The card stays inside the window, and where it was while the mouse is still
     const cardWidth = 230;
-    const cardHeight = 170;
+    const cardHeight = 190;
     const regular = !boid.isPredator;
     const sight = sim.sightRadius(boid);
     const field = sim.fieldOfView(boid);
@@ -564,6 +566,7 @@ export class MainComponent implements OnInit, OnDestroy {
         : 'the whole screen',
       focus: boid.isSuper || !Number.isFinite(sight) || (boid.isPredator ? sim.predatorFieldOfView : sim.boidFieldOfView) >= 360 ? null
         : `${percent(boid.genome.focus - 1)} (${boid.genome.focus >= 1 ? 'narrower, farther' : 'wider, closer'})`,
+      agility: boid.isSuper || !sim.agilityGene ? null : percent(sim.agility(boid) - 1),
       lifeLabel,
       life,
       energy: sim.foodEnabled && regular ? `${Math.round(boid.energy * 100)} %` : null,
@@ -686,6 +689,12 @@ export class MainComponent implements OnInit, OnDestroy {
     return { x, y };
   }
 
+  // The charts show the genes of the life, then those of the senses, the next page is drawn right away
+  nextChartPage() {
+    this.chartPage = (this.chartPage + 1) % ChartRenderer.pageCount;
+    this.lastChartRefresh = -Infinity;
+  }
+
   // The user read the bubble: the next one comes right away
   nextExplanation() {
     this.explainer.next(performance.now());
@@ -803,7 +812,7 @@ export class MainComponent implements OnInit, OnDestroy {
     // The charts only change once per simulated second
     if (this.displayCharts && !this.demo.active && timestamp - this.lastChartRefresh >= this.uiRefreshInterval) {
       this.lastChartRefresh = timestamp;
-      this.chartRenderer.render(sim.stats.samples, this.darkMode);
+      this.chartRenderer.render(sim.stats.samples, this.darkMode, this.chartPage);
     }
   }
 }

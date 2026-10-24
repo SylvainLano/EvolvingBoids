@@ -57,6 +57,7 @@ export class Simulation {
   sizeEffect = 1.5;                   // a boid 10 % faster than the default is 15 % smaller, a slower one bigger
   sizeEndurance = 0.5;                // the energy of a boid lasts as long as the square root of its size
   boidEyesCost = 0.00005;             // energy per step and per unit of gene cost, times (vision² - 1): good eyes cost energy
+  agilityGene = true;                 // the boids and the predators evolve their agility, the challenges balanced before it play without it
 
   // Plankton
   foodEnabled = true;                 // boids eat plankton: they need energy to reproduce, and starve without it - can be modified by the user
@@ -300,6 +301,7 @@ export class Simulation {
         predatorVision: this.predatorSight > 0,
         boidFocus: this.boidFieldOfView < 360,
         predatorFocus: this.predatorSight > 0 && this.predatorFieldOfView < 360,
+        agility: this.agilityGene,
       }
     );
 
@@ -475,8 +477,9 @@ export class Simulation {
 
     // Limit the maximum steering force
     const totalForceSquared = velocityChangeX ** 2 + velocityChangeY ** 2;
-    if (totalForceSquared > this.boidMaxSteeringForce ** 2) {
-      const ratio = this.boidMaxSteeringForce / Math.sqrt(totalForceSquared);
+    const maxSteeringForce = this.boidMaxSteeringForce * this.agility(boid);
+    if (totalForceSquared > maxSteeringForce ** 2) {
+      const ratio = maxSteeringForce / Math.sqrt(totalForceSquared);
       velocityChangeX *= ratio;
       velocityChangeY *= ratio;
     }
@@ -515,7 +518,7 @@ export class Simulation {
 
     let chase = { x: 0, y: 0 };
     let maxVelocity = boid.genome.maxVelocity;
-    let maxSteeringForce = this.predatorMaxSteeringForce;
+    let maxSteeringForce = this.predatorMaxSteeringForce * this.agility(boid);
 
     const speedBeforeSquared = (boid.velocity.x ** 2 + boid.velocity.y ** 2);
     boid.aim = null;
@@ -592,7 +595,7 @@ export class Simulation {
       const away = this.calculateDirection(threat.position, boid.position);
       chase = { x: away.x, y: away.y };
       maxVelocity = boid.genome.maxVelocity;
-      maxSteeringForce = this.predatorMaxSteeringForce * 1.5;
+      maxSteeringForce = this.predatorMaxSteeringForce * this.agility(boid) * 1.5;
     }
 
     if ( chase.x == 0 && chase.y == 0 && this.totalBoids != 0 ) {
@@ -950,6 +953,11 @@ export class Simulation {
     return (toPoint.x * boid.velocity.x + toPoint.y * boid.velocity.y) / (distance * speed) >= Math.cos(field / 2 * Math.PI / 180);
   }
 
+  // How sharply a boid turns, compared to the default of its species: a Super Predator, and any boid when the agility doesn't evolve, has the default
+  agility(boid: Boid): number {
+    return this.agilityGene && !boid.isSuper ? boid.genome.agility : 1;
+  }
+
   // How long a predator can go without eating, in distance swum: fertility shortens it, a big body lengthens it
   starvationLimit(predator: Boid): number {
     return this.starvationThreshold * ( 11 + this.predatorStarvationModificator )/10 * predator.geneCost * this.endurance(predator);
@@ -987,6 +995,7 @@ export class Simulation {
       reproductionRate: (Math.random() < 0.5 ? parent : partner).genome.reproductionRate,
       vision: (Math.random() < 0.5 ? parent : partner).genome.vision,
       focus: (Math.random() < 0.5 ? parent : partner).genome.focus,
+      agility: (Math.random() < 0.5 ? parent : partner).genome.agility,
       lineage: (Math.random() < 0.5 ? parent : partner).genome.lineage,
     };
 
@@ -1050,12 +1059,13 @@ export class Simulation {
       reproductionRate: vary(isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
       vision: vary(1),
       focus: vary(1),
+      agility: vary(1),
       lineage: (Math.random() * 2 - 1) * this.founderLineage,
     };
   }
 
   // The genes a species evolves: the predators only evolve their vision when they don't see the whole screen,
-  // and the focus only matters with a field of view narrower than all around
+  // the focus only matters with a field of view narrower than all around, and the agility unless the rules leave it out
   private genes ( isPredator: boolean ): Gene[] {
     const sighted = !isPredator || this.predatorSight > 0;
     const focused = sighted && (isPredator ? this.predatorFieldOfView : this.boidFieldOfView) < 360;
@@ -1063,6 +1073,7 @@ export class Simulation {
       'maxVelocity', 'reproductionRate',
       ...(sighted ? ['vision' as const] : []),
       ...(focused ? ['focus' as const] : []),
+      ...(this.agilityGene ? ['agility' as const] : []),
     ];
   }
 
@@ -1097,7 +1108,7 @@ export class Simulation {
     genome[gene] = Math.min(defaultValue * (1 + evolutionCap), Math.max(defaultValue * (1 - evolutionCap), value));
   }
 
-  // Trade-off of the genes: faster or more fertile boids live shorter, more fertile predators starve faster
+  // Trade-off of the genes: faster, more fertile or more agile boids live shorter, more fertile or more agile predators starve faster
   // (fast predators already get hungry faster). With a cost above 1, the best genes depend on the predation:
   // boids that are eaten young gain from living fast, boids that die of old age gain from living long
   // Good eyes cost energy, without plankton they cost some life instead
@@ -1105,7 +1116,8 @@ export class Simulation {
     const speed = isPredator ? 0 : genome.maxVelocity / this.boidMaxVelocity - 1;
     const fertility = 1 - genome.reproductionRate / (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
     const vision = isPredator || this.foodEnabled ? 0 : genome.vision - 1;
-    return Math.max(this.minGeneCost, 1 - this.geneCostFactor * (speed + fertility + vision));
+    const agility = this.agilityGene ? genome.agility - 1 : 0;
+    return Math.max(this.minGeneCost, 1 - this.geneCostFactor * (speed + fertility + vision + agility));
   }
 
   // The body size: a slow boid is bigger, a fast one smaller, within reasonable limits
@@ -1182,7 +1194,7 @@ export class Simulation {
   // One added by the user is refused when the FPS is too low, one called by the Deus Ex Machina comes anyway
   addSuperPredator(position: Point, called = false): Boid | null {
     const velocity = { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
-    const genome = { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate, vision: 1, focus: 1, lineage: 0 };
+    const genome = { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate, vision: 1, focus: 1, agility: 1, lineage: 0 };
     const superPredator = called ? this.createBoid(position, velocity, true, genome, 0) : this.insertNewBoid(position, velocity, true, genome, 0);
     if ( superPredator !== null ) {
       // Its size doesn't come from its speed: it is drawn bigger than any predator
