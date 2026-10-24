@@ -19,8 +19,7 @@ export class FoodField {
   food = new Float32Array(0);           // quantity of food in each cell, from 0 to 1
   capacity = new Float32Array(0);       // maximum quantity of food in each cell, given by the patches
 
-  readonly patchCount = 4;
-  readonly patchSpeed = 0.15;           // in px per step: a patch crosses the screen in a couple of minutes
+  readonly patchSpeed = 0.15;          // in px per step: a patch crosses the screen in a couple of minutes
   readonly regrowthRate = 0.0005;       // part of the missing food growing back per step: a grazed cell is 63 % full again after 2000 steps
   readonly decayRate = 0.0005;          // decay per step of the food above the capacity (sown or left by a patch)
   private patches: Patch[] = [];
@@ -30,11 +29,25 @@ export class FoodField {
   private image: HTMLCanvasElement | null = null;
   private imageData: ImageData | null = null;
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, patchCount: number = 4) {
     this.setSize(width, height);
-    this.patches = Array.from({ length: this.patchCount }, () => this.randomPatch());
+    this.patches = Array.from({ length: patchCount }, () => this.randomPatch());
     this.updateCapacity();
     this.food.set(this.capacity);
+  }
+
+  get patchCount(): number {
+    return this.patches.length;
+  }
+
+  // Fertile areas appear or vanish, the plankton follows at its own pace
+  setPatchCount(count: number) {
+    while (this.patches.length < count) {
+      this.patches.push(this.randomPatch());
+    }
+    if (this.patches.length > count) {
+      this.patches.length = Math.max(0, count);
+    }
   }
 
   private setSize(width: number, height: number) {
@@ -49,7 +62,7 @@ export class FoodField {
   }
 
   private randomPatch(): Patch {
-    const radius = Math.min(this.width, this.height) * (0.15 + Math.random() * 0.1);
+    const radius = Math.max(1, Math.min(this.width, this.height) * (0.15 + Math.random() * 0.1));
     const angle = Math.random() * Math.PI * 2;
     return {
       x: Math.random() * this.width,

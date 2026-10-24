@@ -7,11 +7,13 @@
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
 - The animation loop runs outside of Angular's zone, the counters are refreshed 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
-- The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances  
+- The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
 
 ### The Plankton
-- Regular Boids eat plankton, drawn as a glowing mist, that grows in 4 fertile areas slowly drifting across the screen: the flocks graze and migrate to follow it  
+- Regular Boids eat plankton, drawn as a glowing mist, that grows in fertile areas slowly drifting across the screen: the flocks graze and migrate to follow it  
+- The number of fertile areas (3 by default) can be modified in the Boids Options: with a single one, the food gets scarce  
+- Boids are drawn to the plankton, all the more when hungry: with 3 fertile areas, they stay about 3 times more in them than by chance  
 - A grazed area grows back like grass, the plankton left behind by a drifting area fades away  
 - Boids spend energy to live, and much more to swim fast (with the square of the speed), they look for food when hungry and starve without energy  
 - A boid needs 80 % of energy to nest, and each parent spends 30 % at a birth, given to the child  
@@ -25,7 +27,7 @@
 - Current: a drag draws a current that carries the boids along, faster than they swim, and slowly turns them in its direction  
 - Eraser: holding the mouse removes the boids, and the parts of the obstacles, currents and plankton, under it  
 - Food: holding the mouse sows plankton, it fades away out of the fertile areas  
-- Obstacles and currents stay when the simulation restarts, the Clear button removes them. They are only drawn by the Canvas renderer  
+- Obstacles and currents stay when the simulation restarts, the Clear button removes them  
 
 ### The Charts and the Speed
 - Live charts show the populations, the plankton (compared to what the fertile areas can hold), and the average speed and fertility of each species compared to its defaults, over the last 15 simulated minutes  
@@ -61,7 +63,7 @@
 - A mutation alters one gene by one step, for better or worse, within the Evolution Cap  
 - The first Boids start with a slight variation around the species defaults, so natural selection can work right away  
 - Every gene varies slightly (+/- 2 %) at each birth, on top of the rarer and larger mutations  
-- Genes have a cost: each +10 % of speed or fertility shortens the life of a Regular Boid by 15 %, and each +10 % of fertility shortens the starvation resistance of a Predator by 15 % (fast Predators already get hungry faster). The best genes depend on the predation: boids that are eaten young gain from living fast, boids that die of old age gain from living long  
+- Genes have a cost: each +10 % of speed or fertility shortens the life of a Regular Boid by 15 %, and each +10 % of fertility shortens the starvation resistance of a Predator by 15 % (fast Predators already get hungry faster). The best genes depend on the predation: boids that are eaten young gain from living fast, boids that die of old age gain from living long. The cost can be modified in the Boids Options  
 - In Infinite mode, reinforcements arrive when fewer than 30 Regular Boids are left (a few boids can hardly find partners), or when no Predator is left  
 - Reinforcements (Infinite mode, Demo Mode) inherit the genes of the living population, or of the last 30 dead individuals if the species is extinct  
 - The Reproduction Rate shortens both the cooldown and, for Regular Boids, the quiet time needed to nest  
@@ -71,6 +73,15 @@
   - A digesting Predator gets paler
 
 ## Development
+
+### Architecture
+- `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
+- `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection, the options  
+- `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver  
+- `classes/Quadtree.ts`, `classes/SegmentField.ts` and `classes/FoodField.ts` index the boids, the drawn lines and the plankton  
+
+### Tests
+- `ng test` runs the unit tests: the engine (obstacles never crossed, reinforcements, energy, Super Predators...), the Quadtree, the drawn lines, the plankton, and the components  
 
 ### Todos
 - Add different skins (or letters) for boid

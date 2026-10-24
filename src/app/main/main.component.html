@@ -1,12 +1,13 @@
 <div class="main-container" [ngClass]="darkMode ? 'main-container-dark' : ''" [class.demo-cursor-hidden]="demo.active && !demo.showHint"
-    [class.tool-drawing]="!demo.active && (tool === 'obstacle' || tool === 'current' || tool === 'eraser' || tool === 'food')">
-    <canvas #boidCanvas class="boid-canvas" [style.display]="renderer === 'canvas' ? 'block' : 'none'"></canvas>
-    <ng-container *ngIf="renderer === 'dom'">
-    <div class="boid-container">
-        <app-boid *ngFor="let boid of boids.concat(predators)"
+    [class.tool-drawing]="!demo.active && toolDraws">
+    <!-- The world is always drawn on the canvas, the boids too unless the DOM renderer draws them as HTML elements above it -->
+    <canvas #boidCanvas class="boid-canvas"></canvas>
+    <div class="boid-container" *ngIf="renderer === 'dom'">
+        <app-boid *ngFor="let boid of sim.boids.concat(sim.predators)"
             [position]="boid.position"
             [velocity]="boid.velocity"
             [isPredator]="boid.isPredator"
+            [isSuper]="boid.isSuper"
             [isDead]="boid.isDead"
             [speedTrait]="boid.speedTrait"
             [fertilityTrait]="boid.fertilityTrait"
@@ -14,21 +15,8 @@
             [darkMode]="darkMode"
         ></app-boid>
     </div>
-    <div class="quadtree-container" [ngClass]="darkMode ? 'quadtree-container-dark' : ''" *ngIf="drawQuadtree">
-        <div *ngFor="let quadtree of finalQuadtreeList" class="quadtree"
-            [ngClass]="darkMode ? 'quadtree-dark' : 'quadtree-light'"
-            [style.left.px]="quadtree.x"
-            [style.top.px]="quadtree.y"
-            [style.width.px]="quadtree.width"
-            [style.height.px]="quadtree.height"
-            [style.font-size.px]="quadtree.height/1.5"
-        >
-            <div class="boid-count" *ngIf="displayQuadtreeCount">{{ quadtree.entities.length }}</div>
-        </div>
-    </div>
-    </ng-container>
     <div class="messages-container" [class.demo-hidden]="demo.active">
-        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ errorMessage }}</p>
+        <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'">{{ sim.errorMessage }}</p>
     </div>
     <canvas #chartCanvas class="chart-canvas" [ngClass]="darkMode ? 'chart-canvas-dark' : 'chart-canvas-light'"
         [style.display]="displayCharts && !demo.active ? 'block' : 'none'"></canvas>
@@ -49,39 +37,32 @@
         [class.tool-selected]="tool === item.id" [title]="item.title" (click)="selectTool(item.id)">
         <span class="tool-key">{{ i + 1 }}</span>{{ item.label }}
     </button>
-    <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="clearDrawings()">Clear</button>
+    <button type="button" class="tool-button" title="Remove all the obstacles and currents" (click)="sim.clearDrawings()">Clear</button>
 </div>
 
 <div class="display-container" [class.demo-hidden]="demo.active">
 
     <div class="status-container">
-        <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ totalBoids }} - Generation {{ stats.maxBoidGeneration }}</p>
-        <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ totalPredators }} - Generation {{ stats.maxPredatorGeneration }}</p>
+        <p [ngClass]="darkMode ? 'boid-display-dark' : 'boid-display-light'" *ngIf="displayBoidCount">Total Boids: {{ sim.totalBoids }} - Generation {{ sim.stats.maxBoidGeneration }}</p>
+        <p [ngClass]="darkMode ? 'predator-display-dark' : 'predator-display-light'" *ngIf="displayBoidCount">Total Predators: {{ sim.totalPredators }} - Generation {{ sim.stats.maxPredatorGeneration }}</p>
         <p [ngClass]="darkMode ? 'fps-display-dark' : 'fps-display-light'" *ngIf="displayFPSCount">FPS: {{ fps }}</p>
     </div>
 
-    <div class="form-container" (click)="handleFormClick($event)">
+    <div class="form-container">
         <form>
             <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'">
-                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !predatorOptionsVisible && !displayOptionsVisible">
-                    -> <a (click)="toggleOptions('Simulation')" id="toggleSimulationOptionsButton">Show Simulation Options</a>
-                </p>
-                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !predatorOptionsVisible && !simulationOptionsVisible">
-                    -> <a (click)="toggleOptions('Display')" id="toggleDisplayOptionsButton">Show Display Options</a>
-                </p>
-                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!displayOptionsVisible && !predatorOptionsVisible && !simulationOptionsVisible">
-                    -> <a (click)="toggleOptions('Boid')" id="toggleBoidOptionsButton">Show Boids Options</a>
-                </p>
-                <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="!boidOptionsVisible && !displayOptionsVisible && !simulationOptionsVisible">
-                    -> <a (click)="toggleOptions('Predator')" id="togglePredatorOptionsButton">Show Predator Options</a>
-                </p>
+                <ng-container *ngFor="let panel of optionsPanels">
+                    <p class="display-options" [ngClass]="darkMode ? 'display-options-dark' : 'display-options-light'" *ngIf="openOptions === null || openOptions === panel">
+                        -> <a (click)="toggleOptions(panel)">{{ openOptions === panel ? 'Hide' : 'Show' }} {{ panel }} Options</a>
+                    </p>
+                </ng-container>
             </div>
-            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="simulationOptionsVisible" id="hiddenSimulationOptions">
-                <p [ngClass]="darkMode ? pauseSimulation ? 'simulation-blue-dark' : 'simulation-red-dark' : pauseSimulation ? 'simulation-blue-light' : 'simulation-red-light'">
-                    -> <a (click)="togglePause()" id="pauseSimulation">Pause Simulation</a>
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="openOptions === 'Simulation'">
+                <p [ngClass]="darkMode ? sim.pauseSimulation ? 'simulation-blue-dark' : 'simulation-red-dark' : sim.pauseSimulation ? 'simulation-blue-light' : 'simulation-red-light'">
+                    -> <a (click)="sim.pauseSimulation = !sim.pauseSimulation">{{ sim.pauseSimulation ? 'Resume' : 'Pause' }} Simulation</a>
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-red-dark' : 'simulation-red-light'">
-                    -> <a (click)="initializeSimulation()" id="restartSimulation">Restart Simulation</a>
+                    -> <a (click)="restart()">Restart Simulation</a>
                 </p>
                 <p title="Speed up the simulation to watch the evolution, also with the + and - keys">
                     Speed :
@@ -91,29 +72,29 @@
                 </p>
                 <p [ngClass]="darkMode ? 'simulation-blue-dark' : 'simulation-blue-light'"
                     title="A never ending screensaver, in fullscreen. Also with the D key, or the url index.html?demo">
-                    -> <a (click)="demo.start(true)" id="startDemo">Start Demo Mode (D)</a>
+                    -> <a (click)="demo.start(true)">Start Demo Mode (D)</a>
                 </p>
                 <div style="display:inline;">
                     Simulation Mode :
                     <ul style="list-style-type:none;">
                         <li>
                             <label title="Pause the simulation when one side is depleted.">
-                                <input type="radio" [(ngModel)]="simulationMode" value="DeathMatch" name="simulationMode"> DeathMatch
+                                <input type="radio" [(ngModel)]="sim.simulationMode" value="DeathMatch" name="simulationMode"> DeathMatch
                             </label>
                         </li>
                         <li>
                             <label title="Restart the simulation when one side is depleted.">
-                                <input type="radio" [(ngModel)]="simulationMode" value="Retry" name="simulationMode"> Retry
+                                <input type="radio" [(ngModel)]="sim.simulationMode" value="Retry" name="simulationMode"> Retry
                             </label>
                         </li>
                         <li>
                             <label title="Continue the simulation without noticing depletion.">
-                                <input type="radio" [(ngModel)]="simulationMode" value="Continued" name="simulationMode"> Continued
+                                <input type="radio" [(ngModel)]="sim.simulationMode" value="Continued" name="simulationMode"> Continued
                             </label>
                         </li>
                         <li>
-                            <label title="When one side is depleted, add some fresh boids to this side.">
-                                <input type="radio" [(ngModel)]="simulationMode" value="Infinite" name="simulationMode"> Infinite
+                            <label title="When one side is almost depleted, add some boids to this side, with the genes of the population.">
+                                <input type="radio" [(ngModel)]="sim.simulationMode" value="Infinite" name="simulationMode"> Infinite
                             </label>
                         </li>
                     </ul>
@@ -123,23 +104,23 @@
                     <ul style="list-style-type:none;">
                         <li>
                             <label title="Remove 5 % of the boids in the side in excess.">
-                                <input type="radio" [(ngModel)]="lowFPSAction" value="PopulationControl" name="lowFPSAction"> Population Control
+                                <input type="radio" [(ngModel)]="sim.lowFPSAction" value="PopulationControl" name="lowFPSAction"> Population Control
                             </label>
                         </li>
                         <li>
                             <label title="Remove 50 % of the boids in each side.">
-                                <input type="radio" [(ngModel)]="lowFPSAction" value="BudgetCuts" name="lowFPSAction"> Budget Cuts
+                                <input type="radio" [(ngModel)]="sim.lowFPSAction" value="BudgetCuts" name="lowFPSAction"> Budget Cuts
                             </label>
                         </li>
                         <li>
                             <label title="Continue the simulation without noticing depletion.">
-                                <input type="radio" [(ngModel)]="lowFPSAction" value="Nothing" name="lowFPSAction"> Do Nothing
+                                <input type="radio" [(ngModel)]="sim.lowFPSAction" value="Nothing" name="lowFPSAction"> Do Nothing
                             </label>
                         </li>
                     </ul>
                 </div>
             </div>
-            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="displayOptionsVisible" id="hiddenDisplayOptions">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="openOptions === 'Display'">
                 <p class="display-options">
                     Renderer :
                     <label title="Draw the boids on a canvas, with trails and glow.">
@@ -172,7 +153,7 @@
                 <p class="display-options">
                     Hold Shift and hover a boid to inspect it
                 </p>
-                <p class="display-options" title="Populations, and average genes compared to the species defaults">
+                <p class="display-options" title="Populations, plankton, and average genes compared to the species defaults">
                     Display Charts :
                     <input type="checkbox" [(ngModel)]="displayCharts" name="displayCharts">
                 </p>
@@ -182,148 +163,163 @@
                 </p>
                 <p class="slider-p" title="With the Canvas renderer.">
                     Trails length :
-                    <mat-slider [(ngModel)]="trailLength" min="0" max="20" step="2" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.trailLength" min="0" max="20" step="2" showTickMarks discrete
                     name="trailLength" ngDefaultControl>
-                    <input matSliderThumb [value]="trailLength">
+                    <input matSliderThumb [value]="sim.trailLength">
                     </mat-slider>
                 </p>
             </div>
-            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="boidOptionsVisible" id="hiddenBoidOptions">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="openOptions === 'Boids'">
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Alignment Radius in px :
-                    <mat-slider [(ngModel)]="alignmentRadius" min="10" max="200" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.alignmentRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="alignmentRadius" ngDefaultControl>
-                    <input matSliderThumb [value]="alignmentRadius">
+                    <input matSliderThumb [value]="sim.alignmentRadius">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Cohesion Radius in px :
-                    <mat-slider [(ngModel)]="cohesionRadius" min="10" max="200" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.cohesionRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="cohesionRadius" ngDefaultControl>
-                    <input matSliderThumb [value]="cohesionRadius">
+                    <input matSliderThumb [value]="sim.cohesionRadius">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Separation Radius in px :
-                    <mat-slider [(ngModel)]="boidsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="boidsSeparationRadius" ngDefaultControl>
-                    <input matSliderThumb [value]="boidsSeparationRadius">
+                    <input matSliderThumb [value]="sim.boidsSeparationRadius">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Reproduction Modif :
-                    <mat-slider [(ngModel)]="boidReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="boidReproductionModificator" ngDefaultControl>
-                    <input matSliderThumb [value]="boidReproductionModificator">
+                    <input matSliderThumb [value]="sim.boidReproductionModificator">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Reproduction Chances % :
-                    <mat-slider [(ngModel)]="boidReproductionChances" min="0" max="100" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidReproductionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="boidReproductionChances" ngDefaultControl>
-                    <input matSliderThumb [value]="boidReproductionChances">
+                    <input matSliderThumb [value]="sim.boidReproductionChances">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
                     title="Average age at which a boid dies, +/- 20 %. 0 makes the boids immortal.">
                     Boids Lifespan in s :
-                    <mat-slider [(ngModel)]="boidLifespan" min="0" max="600" step="30" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidLifespan" min="0" max="600" step="30" showTickMarks discrete
                     name="boidLifespan" ngDefaultControl>
-                    <input matSliderThumb [value]="boidLifespan">
+                    <input matSliderThumb [value]="sim.boidLifespan">
+                    </mat-slider>
+                </p>
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
+                    title="Each +10 % of speed or fertility shortens a life by this many tenths. Above 1, the best genes depend on the predation. Applies to the newborns.">
+                    Genes cost :
+                    <mat-slider [(ngModel)]="sim.geneCostFactor" min="0" max="3" step="0.5" showTickMarks discrete
+                    name="geneCostFactor" ngDefaultControl>
+                    <input matSliderThumb [value]="sim.geneCostFactor">
                     </mat-slider>
                 </p>
                 <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
                     title="Boids eat plankton, growing in drifting fertile areas: they need energy to reproduce, and starve without it.">
                     Plankton (boids need food) :
-                    <input type="checkbox" [(ngModel)]="foodEnabled" name="foodEnabled">
+                    <input type="checkbox" [(ngModel)]="sim.foodEnabled" name="foodEnabled">
+                </p>
+                <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'"
+                    title="Number of drifting areas where the plankton grows: fewer areas make the food scarcer.">
+                    Fertile areas :
+                    <mat-slider [(ngModel)]="sim.fertileAreas" min="1" max="6" step="1" showTickMarks discrete
+                    name="fertileAreas" ngDefaultControl>
+                    <input matSliderThumb [value]="sim.fertileAreas">
+                    </mat-slider>
                 </p>
                 <p class="option" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Fleeing a Predator resets nesting time :
-                    <input type="checkbox" [(ngModel)]="fleeReset" name="fleeReset">
+                    <input type="checkbox" [(ngModel)]="sim.fleeReset" name="fleeReset">
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Evolution Chances % :
-                    <mat-slider [(ngModel)]="boidEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="boidEvolutionChances" ngDefaultControl>
-                    <input matSliderThumb [value]="boidEvolutionChances">
+                    <input matSliderThumb [value]="sim.boidEvolutionChances">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Boids Max Evolution % :
-                    <mat-slider [(ngModel)]="boidEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.boidEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
                     name="boidEvolutionCap" ngDefaultControl>
-                    <input matSliderThumb [value]="boidEvolutionCap">
+                    <input matSliderThumb [value]="sim.boidEvolutionCap">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Predator Detection Radius :
-                    <mat-slider [(ngModel)]="fleeRadius" min="20" max="300" step="20" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.fleeRadius" min="20" max="300" step="20" showTickMarks discrete
                     name="fleeRadius" ngDefaultControl>
-                    <input matSliderThumb [value]="fleeRadius">
+                    <input matSliderThumb [value]="sim.fleeRadius">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'boids-options-dark' : 'boids-options-light'">
                     Predator Fleeing Force :
-                    <mat-slider [(ngModel)]="fleeFactor" min="-5" max="10" step="1" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.fleeFactor" min="-5" max="10" step="1" showTickMarks discrete
                     name="fleeFactor" ngDefaultControl>
-                    <input matSliderThumb [value]="fleeFactor">
+                    <input matSliderThumb [value]="sim.fleeFactor">
                     </mat-slider>
                 </p>
             </div>
-            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="predatorOptionsVisible" id="hiddenPredatorOptions">
+            <div [ngClass]="darkMode ? 'hidden-options-dark' : 'hidden-options-light'" *ngIf="openOptions === 'Predator'">
                 <p class="option" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'"
                     title="Predator will try to choose a prey that is not already chased.">
                     Predator cooperativeness :
-                    <input type="checkbox" [(ngModel)]="predatorsCooperativeness" name="predatorsCooperativeness">
+                    <input type="checkbox" [(ngModel)]="sim.predatorsCooperativeness" name="predatorsCooperativeness">
                 </p>
                 <p class="option" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predator ability to change prey :
-                    <input type="checkbox" [(ngModel)]="predatorVersatility" name="predatorVersatility">
+                    <input type="checkbox" [(ngModel)]="sim.predatorVersatility" name="predatorVersatility">
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predators Reproduction Modif :
-                    <mat-slider [(ngModel)]="predatorReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorReproductionModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="predatorReproductionModificator" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorReproductionModificator">
+                    <input matSliderThumb [value]="sim.predatorReproductionModificator">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predators Reproduction Chances % :
-                    <mat-slider [(ngModel)]="predatorReproductionChances" min="0" max="100" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorReproductionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="predatorReproductionChances" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorReproductionChances">
+                    <input matSliderThumb [value]="sim.predatorReproductionChances">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predator Evolution Chances % :
-                    <mat-slider [(ngModel)]="predatorEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorEvolutionChances" min="0" max="100" step="5" showTickMarks discrete
                     name="predatorEvolutionChances" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorEvolutionChances">
+                    <input matSliderThumb [value]="sim.predatorEvolutionChances">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Predator Max Evolution % :
-                    <mat-slider [(ngModel)]="predatorEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorEvolutionCap" min="5" max="95" step="5" showTickMarks discrete
                     name="predatorEvolutionCap" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorEvolutionCap">
+                    <input matSliderThumb [value]="sim.predatorEvolutionCap">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Separation Radius in px :
-                    <mat-slider [(ngModel)]="predatorsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorsSeparationRadius" min="10" max="200" step="5" showTickMarks discrete
                     name="predatorsSeparationRadius" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorsSeparationRadius">
+                    <input matSliderThumb [value]="sim.predatorsSeparationRadius">
                     </mat-slider>
                 </p>
                 <p class="slider-p" [ngClass]="darkMode ? 'predators-options-dark' : 'predators-options-light'">
                     Resistance to starvation :
-                    <mat-slider [(ngModel)]="predatorStarvationModificator" min="-10" max="10" step="1" showTickMarks discrete
+                    <mat-slider [(ngModel)]="sim.predatorStarvationModificator" min="-10" max="10" step="1" showTickMarks discrete
                     name="predatorStarvationModificator" ngDefaultControl>
-                    <input matSliderThumb [value]="predatorStarvationModificator">
+                    <input matSliderThumb [value]="sim.predatorStarvationModificator">
                     </mat-slider>
                 </p>
-            </div>  
+            </div>
         </form>
     </div>
 </div>
- 

@@ -11,6 +11,7 @@ export class BoidComponent implements OnChanges {
   @Input() position!: { x: number, y: number };
   @Input() velocity!: { x: number, y: number };
   @Input() isPredator!: boolean;
+  @Input() isSuper = false;
   @Input() isDead!: boolean;
   @Input() speedTrait!: number;       // in [-1, 1], -1 is the slowest, 1 the fastest
   @Input() fertilityTrait!: number;   // in [-1, 1], -1 is the least fertile, 1 the most fertile
@@ -19,25 +20,18 @@ export class BoidComponent implements OnChanges {
 
   colorStyle: { [key: string]: string } = {};
 
+  private static readonly colorInputs = ['isPredator', 'isSuper', 'isDead', 'speedTrait', 'fertilityTrait', 'alpha', 'darkMode'];
+
+  // Angular only reports the inputs that changed: the position and velocity change at each frame, the color rarely
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.shouldRecalculateColor(changes)) {
+    if (BoidComponent.colorInputs.some(input => input in changes)) {
       this.calculateColor();
     }
   }
 
-  private shouldRecalculateColor(changes: SimpleChanges): boolean {
-    return (
-      changes['alpha'] && changes['alpha'].currentValue !== changes['alpha'].previousValue ||
-      changes['isDead'] && changes['isDead'].currentValue !== changes['isDead'].previousValue ||
-      changes['darkMode'] && changes['darkMode'].currentValue !== changes['darkMode'].previousValue ||
-      changes['speedTrait'] && changes['speedTrait'].currentValue !== changes['speedTrait'].previousValue ||
-      changes['fertilityTrait'] && changes['fertilityTrait'].currentValue !== changes['fertilityTrait'].previousValue
-    );
-  }
-
   private calculateColor(): void {
     this.colorStyle = {
-      'color': boidColor(this.isPredator, this.isDead, this.speedTrait, this.fertilityTrait, this.alpha, this.darkMode)
+      'color': boidColor(this.isPredator, this.isDead, this.speedTrait, this.fertilityTrait, this.alpha, this.darkMode, 1, this.isSuper)
     };
   }
 

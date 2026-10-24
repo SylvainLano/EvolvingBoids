@@ -1,8 +1,9 @@
 // DemoMode.ts
 import type { MainComponent } from '../main/main.component';
+import type { Simulation } from './Simulation';
 
 // Simulation parameters that change from one scene to another, morphed smoothly during the transitions
-type SceneParams = Pick<MainComponent,
+type SceneParams = Pick<Simulation,
   'alignmentRadius' | 'cohesionRadius' | 'boidsSeparationRadius' | 'fleeRadius' | 'fleeFactor' | 'predatorsSeparationRadius' | 'trailLength'>;
 
 interface DemoScene {
@@ -37,13 +38,14 @@ const SCENES: DemoScene[] = [
   },
 ];
 
-// Settings changed by the demo, restored when it stops
-const SAVED_SETTINGS = [
-  'darkMode', 'glow', 'drawQuadtree', 'renderer', 'simulationMode', 'lowFPSAction', 'pauseSimulation', 'timeScale',
-  'boidReproductionChances', 'predatorReproductionChances',
+// Settings changed by the demo, restored when it stops: some of the display, some of the simulation
+const SAVED_VIEW = ['darkMode', 'glow', 'drawQuadtree', 'renderer', 'timeScale'] as const;
+const SAVED_SIMULATION = [
+  'simulationMode', 'lowFPSAction', 'pauseSimulation', 'boidReproductionChances', 'predatorReproductionChances',
   'alignmentRadius', 'cohesionRadius', 'boidsSeparationRadius', 'fleeRadius', 'fleeFactor', 'predatorsSeparationRadius', 'trailLength',
 ] as const;
-type SavedSettings = Partial<Pick<MainComponent, typeof SAVED_SETTINGS[number]>>;
+type SavedView = Partial<Pick<MainComponent, typeof SAVED_VIEW[number]>>;
+type SavedSimulation = Partial<Pick<Simulation, typeof SAVED_SIMULATION[number]>>;
 
 // A screensaver mode: no interface, scenes following each other, and a director keeping the ecosystem alive forever
 export class DemoMode {
@@ -61,7 +63,8 @@ export class DemoMode {
   readonly predatorReproductionChances = 10;
   readonly minFPSToGrow = 45;             // under this, the population stops growing
 
-  private saved: SavedSettings = {};
+  private savedView: SavedView = {};
+  private savedSimulation: SavedSimulation = {};
   private sceneIndex = -1;
   private sceneStart = 0;
   private fromParams!: SceneParams;
@@ -72,7 +75,11 @@ export class DemoMode {
   private wakeLock: WakeLockSentinel | null = null;
   private enteredFullscreen = false;
 
-  constructor(private sim: MainComponent) {}
+  constructor(private app: MainComponent) {}
+
+  private get sim(): Simulation {
+    return this.app.sim;
+  }
 
   // Fullscreen can only be requested from a user action (click, key)
   start(fullscreen: boolean) {
@@ -80,11 +87,10 @@ export class DemoMode {
       return;
     }
     this.active = true;
-    this.saved = Object.fromEntries(SAVED_SETTINGS.map(key => [key, this.sim[key]])) as SavedSettings;
-    Object.assign(this.sim, {
-      darkMode: true, glow: true, drawQuadtree: false, renderer: 'canvas',
-      simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false, timeScale: 1,
-    });
+    this.savedView = Object.fromEntries(SAVED_VIEW.map(key => [key, this.app[key]])) as SavedView;
+    this.savedSimulation = Object.fromEntries(SAVED_SIMULATION.map(key => [key, this.sim[key]])) as SavedSimulation;
+    Object.assign(this.app, { darkMode: true, glow: true, drawQuadtree: false, renderer: 'canvas', timeScale: 1 });
+    Object.assign(this.sim, { simulationMode: 'Infinite', lowFPSAction: 'PopulationControl', pauseSimulation: false });
     this.sim.mousePosition = null;
 
     const now = performance.now();
@@ -106,7 +112,8 @@ export class DemoMode {
     }
     this.active = false;
     this.showTitle = this.showHint = false;
-    Object.assign(this.sim, this.saved);
+    Object.assign(this.app, this.savedView);
+    Object.assign(this.sim, this.savedSimulation);
 
     this.wakeLock?.release().catch(() => {});
     this.wakeLock = null;
@@ -207,8 +214,8 @@ export class DemoMode {
   // Keep both populations within the scene ranges, so the demo never collapses nor freezes the computer
   private direct(timestamp: number) {
     const scene = this.scene;
-    const boids = this.sim.boids.length;
-    const predators = this.sim.predators.filter(predator => !predator.isDead).length;
+    const boids = this.sim.boids.filter(boid => !boid.isDead).length;
+    const predators = this.sim.predators.filter(predator => !predator.isDead && !predator.isSuper).length;
     const canGrow = this.sim.fps >= this.minFPSToGrow;
 
     this.sim.boidReproductionChances = boids < scene.maxBoids && canGrow ? this.boidReproductionChances : 0;
@@ -231,8 +238,8 @@ export class DemoMode {
 
   // A group enters from a random border, heading inside, with the genes of the current (or recently dead) population
   private arrive(isPredator: boolean, count: number) {
-    const width = this.sim.containerWidth;
-    const height = this.sim.containerHeight;
+    const width = this.sim.width;
+    const height = this.sim.height;
     const border = Math.floor(Math.random() * 4);
     const along = 0.2 + Math.random() * 0.6;
     const heading = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }][border];
@@ -257,7 +264,6 @@ export class DemoMode {
         isPredator,
         genome,
         Math.random() * rate,
-        this.sim.quadtree,
         generation
       );
     }
