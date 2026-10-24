@@ -109,7 +109,7 @@ describe('Explainer', () => {
     explainer.setEnabled(true, 10000, sim);
     expect(explainer.current?.id).toBe('flocking');
     const anchor = explainer.current!.anchor;
-    expect(isArea(anchor) && Math.abs(anchor.center.x - 312.5) < 1).toBeTrue();
+    expect(isArea(anchor) && Math.abs(anchor.center.x - 312.5) < 1).toBe(true);
   });
 
   it('should point at the plankton itself, not at a boid, away from the borders', () => {
@@ -121,7 +121,7 @@ describe('Explainer', () => {
     explainer.setEnabled(true, 10000, sim);
     expect(explainer.current?.id).toBe('grazing');
     const anchor = explainer.current!.anchor;
-    expect(isArea(anchor) && anchor.center.x === 410 && anchor.center.y === 310).toBeTrue();
+    expect(isArea(anchor) && anchor.center.x === 410 && anchor.center.y === 310).toBe(true);
   });
 
   it('should hide the bubble when disabled', () => {

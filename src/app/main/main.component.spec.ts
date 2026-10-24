@@ -1,10 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormsModule } from '@angular/forms';
-import { MatSliderModule } from '@angular/material/slider';
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 import { MainComponent } from './main.component';
-import { BoidComponent } from '../boid/boid.component';
 
 describe('MainComponent', () => {
   let component: MainComponent;
@@ -12,8 +8,7 @@ describe('MainComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [MainComponent, BoidComponent],
-      imports: [FormsModule, MatSliderModule, NoopAnimationsModule],
+      imports: [MainComponent],
     })
     .compileComponents();
 
@@ -64,20 +59,30 @@ describe('MainComponent', () => {
     expect(component.timeScale).toBe(1);
   });
 
+  it('should give numbers to the simulation from the sliders', async () => {
+    const links: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('.display-options a'));
+    links.find(link => link.textContent!.includes('Boids Options'))!.click();
+    await fixture.whenStable();
+    const thumb: HTMLInputElement = fixture.nativeElement.querySelector('input[name="alignmentRadius"]');
+    thumb.value = '120';
+    thumb.dispatchEvent(new Event('input'));
+    expect(component.sim.alignmentRadius).toBe(120);
+  });
+
   it('should start in dark mode, without the Quadtree', () => {
-    expect(component.darkMode).toBeTrue();
-    expect(component.drawQuadtree).toBeFalse();
+    expect(component.darkMode).toBe(true);
+    expect(component.drawQuadtree).toBe(false);
   });
 
   it('should restore the settings when the demo stops', () => {
     component.darkMode = false;
     component.drawQuadtree = true;
     component.demo.start(false);
-    expect(component.darkMode).toBeTrue();
-    expect(component.drawQuadtree).toBeFalse();
+    expect(component.darkMode).toBe(true);
+    expect(component.drawQuadtree).toBe(false);
     component.demo.stop();
-    expect(component.darkMode).toBeFalse();
-    expect(component.drawQuadtree).toBeTrue();
+    expect(component.darkMode).toBe(false);
+    expect(component.drawQuadtree).toBe(true);
   });
 
   it('should stop listening to the page once destroyed', () => {

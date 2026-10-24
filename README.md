@@ -5,7 +5,7 @@
 
 ### The Rendering
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
-- The animation loop runs outside of Angular's zone, the counters are refreshed 5 times per second  
+- Angular runs without zone.js: the animation loop refreshes the view itself, the counters 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
 - The simulation starts in Dark Mode, without the Quadtree drawn: both can be changed in the Display Options  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
@@ -94,6 +94,7 @@
 ## Development
 
 ### Architecture
+- Angular 22, with standalone components (no NgModule nor router for this single page), zoneless change detection, the new control flow (`@if`, `@for`) and the esbuild based `@angular/build`  
 - `classes/Simulation.ts` is the simulation engine, without anything about Angular nor the display: the boids, the predators, the plankton, the obstacles and currents, the genetics and the statistics  
 - `main/main.component.ts` displays it and controls it: the animation loop, the mouse tools, the inspection, the options  
 - `classes/CanvasRenderer.ts` and `classes/ChartRenderer.ts` draw the world and the charts, `classes/DemoMode.ts` drives the screensaver, `classes/Challenges.ts` defines and runs the challenges, `classes/Explainer.ts` chooses the explanations from the events of the simulation  
@@ -101,6 +102,7 @@
 
 ### Tests
 - `ng test` runs the unit tests: the engine (obstacles never crossed, reinforcements, energy, Super Predators...), the Quadtree, the drawn lines, the plankton, and the components  
+- They run with Vitest in a headless Chromium driven by Playwright, as the components draw on real canvases: set `CHROME_BIN` to the installed Chrome, or run `npx playwright install chromium` once  
 
 ### Todos
 - Add different skins (or letters) for boid

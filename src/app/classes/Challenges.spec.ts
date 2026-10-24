@@ -30,7 +30,7 @@ describe('Challenges', () => {
     expect(sim.numberOfPredators).toBe(6);
     expect(sim.predators.length).toBe(6);
     expect(sim.simulationMode).toBe('Continued');
-    expect(sim.obstacles.isEmpty).toBeTrue();
+    expect(sim.obstacles.isEmpty).toBe(true);
     runner.close();
     expect(sim.numberOfPredators).toBe(3);
     expect(sim.simulationMode).toBe('Infinite');
@@ -38,24 +38,24 @@ describe('Challenges', () => {
   });
 
   it('should only allow the tools of the challenge', () => {
-    expect(runner.isAllowed('boid')).toBeTrue();
+    expect(runner.isAllowed('boid')).toBe(true);
     runner.start(challenge('fortress'));
-    expect(runner.isAllowed('obstacle')).toBeTrue();
-    expect(runner.isAllowed('boid')).toBeFalse();
-    expect(runner.isAllowed('eraser')).toBeFalse();
+    expect(runner.isAllowed('obstacle')).toBe(true);
+    expect(runner.isAllowed('boid')).toBe(false);
+    expect(runner.isAllowed('eraser')).toBe(false);
   });
 
   it('should count the uses of a tool with a budget', () => {
     runner.start(challenge('coexistence'));
     expect(runner.budgetText).toBe('3 predators left');
-    expect(runner.use('predator')).toBeTrue();
-    expect(runner.use('predator')).toBeTrue();
-    expect(runner.use('predator')).toBeTrue();
-    expect(runner.use('predator')).toBeFalse();
-    expect(runner.isAllowed('predator')).toBeFalse();
-    expect(runner.use('eraser')).toBeTrue();
+    expect(runner.use('predator')).toBe(true);
+    expect(runner.use('predator')).toBe(true);
+    expect(runner.use('predator')).toBe(true);
+    expect(runner.use('predator')).toBe(false);
+    expect(runner.isAllowed('predator')).toBe(false);
+    expect(runner.use('eraser')).toBe(true);
     runner.retry();
-    expect(runner.isAllowed('predator')).toBeTrue();
+    expect(runner.isAllowed('predator')).toBe(true);
   });
 
   it('should be lost, and pause the simulation, when a species is extinct', () => {
@@ -65,7 +65,7 @@ describe('Challenges', () => {
     }
     runner.update();
     expect(runner.state).toBe('lost');
-    expect(sim.pauseSimulation).toBeTrue();
+    expect(sim.pauseSimulation).toBe(true);
   });
 
   it('should be won after holding on, and remember it', () => {
@@ -102,7 +102,7 @@ describe('Challenges', () => {
     runner.retry();
     expect(runner.state).toBe('running');
     expect(sim.elapsedSteps).toBe(0);
-    expect(sim.pauseSimulation).toBeFalse();
+    expect(sim.pauseSimulation).toBe(false);
     expect(sim.predators.length).toBe(6);
   });
 });

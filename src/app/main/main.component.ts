@@ -1,4 +1,8 @@
-import { Component, OnInit, OnDestroy, ElementRef, NgZone, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ChangeDetectorRef, ViewChild, ChangeDetectionStrategy } from '@angular/core';
+import { NgClass } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatSliderModule } from '@angular/material/slider';
+import { BoidComponent } from '../boid/boid.component';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Point } from '../classes/Boid';
 import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
@@ -29,8 +33,10 @@ interface Inspection {
 // The display of the simulation and its controls: the animation loop, the mouse tools, the options
 @Component({
   selector: 'app-main',
+  imports: [NgClass, FormsModule, MatSliderModule, BoidComponent],
   templateUrl: './main.component.html',
   styleUrls: ['./main.component.sass'],
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class MainComponent implements OnInit, OnDestroy {
   readonly sim = new Simulation();
@@ -113,7 +119,7 @@ export class MainComponent implements OnInit, OnDestroy {
   @ViewChild('chartCanvas', { static: true }) chartCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('boidCanvas', { static: true }) boidCanvas!: ElementRef<HTMLCanvasElement>;
 
-  constructor(private el: ElementRef, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
+  constructor(private el: ElementRef, private cdr: ChangeDetectorRef) {
     this.sim.onEvent = (event) => {
       // A ring spreads around each newborn mutant, in real time so it stays visible when the simulation is sped up
       if ( event.type === 'mutant' ) {
@@ -130,30 +136,28 @@ export class MainComponent implements OnInit, OnDestroy {
     this.chartRenderer = new ChartRenderer(this.chartCanvas.nativeElement);
     this.restart();
 
-    // The animation loop and the listeners run outside of Angular, so they don't trigger a change detection
-    // of the whole application at each frame or mouse move: the view is refreshed on demand in render()
-    this.ngZone.runOutsideAngular(() => {
-      this.listen(document, 'mousemove', (event: MouseEvent) => this.handleMouseMove(event));
-      this.listen(document, 'click', (event: MouseEvent) => this.handleMouseClick(event));
-      this.listen(document, 'mousedown', (event: MouseEvent) => this.handleMouseDown(event));
-      this.listen(window, 'mouseup', () => this.handleMouseUp());
-      this.listen(document.documentElement, 'mouseleave', () => this.sim.mousePosition = this.pointerPosition = null);
-      this.listen(document, 'keydown', (event: KeyboardEvent) => this.handleKeyDown(event));
-      this.listen(document, 'keyup', (event: KeyboardEvent) => {
-        if ( event.key === 'Shift' ) {
-          this.setInspecting(false);
-        }
-      });
-      this.listen(document, 'visibilitychange', () => this.demo.onVisibilityChange());
-      this.listen(document, 'fullscreenchange', () => this.demo.onFullscreenChange());
-
-      // The demo can be started directly with an url like index.html?demo
-      if (new URLSearchParams(window.location.search).has('demo')) {
-        this.demo.start(false);
+    // Angular runs without zone.js: the animation loop and these listeners don't trigger any change detection
+    // at each frame or mouse move, the view is refreshed on demand in render()
+    this.listen(document, 'mousemove', (event: MouseEvent) => this.handleMouseMove(event));
+    this.listen(document, 'click', (event: MouseEvent) => this.handleMouseClick(event));
+    this.listen(document, 'mousedown', (event: MouseEvent) => this.handleMouseDown(event));
+    this.listen(window, 'mouseup', () => this.handleMouseUp());
+    this.listen(document.documentElement, 'mouseleave', () => this.sim.mousePosition = this.pointerPosition = null);
+    this.listen(document, 'keydown', (event: KeyboardEvent) => this.handleKeyDown(event));
+    this.listen(document, 'keyup', (event: KeyboardEvent) => {
+      if ( event.key === 'Shift' ) {
+        this.setInspecting(false);
       }
-
-      this.frameRequest = requestAnimationFrame((timestamp) => this.frame(timestamp));
     });
+    this.listen(document, 'visibilitychange', () => this.demo.onVisibilityChange());
+    this.listen(document, 'fullscreenchange', () => this.demo.onFullscreenChange());
+
+    // The demo can be started directly with an url like index.html?demo
+    if (new URLSearchParams(window.location.search).has('demo')) {
+      this.demo.start(false);
+    }
+
+    this.frameRequest = requestAnimationFrame((timestamp) => this.frame(timestamp));
   }
 
   // The loop and the listeners stop with the component

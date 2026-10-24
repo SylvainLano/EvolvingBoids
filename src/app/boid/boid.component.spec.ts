@@ -9,7 +9,7 @@ describe('BoidComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [BoidComponent]
+      imports: [BoidComponent]
     })
     .compileComponents();
 

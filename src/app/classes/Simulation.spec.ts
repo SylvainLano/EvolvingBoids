@@ -47,8 +47,8 @@ describe('Simulation', () => {
     steps(sim, 1200);
     const all = [...sim.boids, ...sim.predators];
     for (const boid of all) {
-      expect(Number.isFinite(boid.position.x) && Number.isFinite(boid.velocity.x)).toBeTrue();
-      expect(boid.position.x >= 0 && boid.position.x < 800 && boid.position.y >= 0 && boid.position.y < 600).toBeTrue();
+      expect(Number.isFinite(boid.position.x) && Number.isFinite(boid.velocity.x)).toBe(true);
+      expect(boid.position.x >= 0 && boid.position.x < 800 && boid.position.y >= 0 && boid.position.y < 600).toBe(true);
     }
     const inQuadtree = sim.quadtree.retrieveFinalQuadtrees().reduce((sum, leaf) => sum + leaf.entities.length, 0);
     expect(inQuadtree).toBe(all.length);
@@ -59,7 +59,7 @@ describe('Simulation', () => {
     const first = addBoid(sim, 300, 300, 1, 0);
     const second = addBoid(sim, 300, 300, 1, 0);
     steps(sim, 10);
-    expect(Number.isFinite(first.velocity.x) && Number.isFinite(second.velocity.x)).toBeTrue();
+    expect(Number.isFinite(first.velocity.x) && Number.isFinite(second.velocity.x)).toBe(true);
   });
 
   it('should never let a boid or a predator cross an obstacle', () => {
@@ -160,7 +160,7 @@ describe('Simulation', () => {
     sim.step();
     expect(sim.totalPredators).toBe(1);
     steps(sim, sim.superPredatorLifetime * sim.stepsPerSecond);
-    expect(superPredator.isDead).toBeTrue();
+    expect(superPredator.isDead).toBe(true);
   });
 
   it('should need energy to nest, only with plankton', () => {
@@ -169,12 +169,12 @@ describe('Simulation', () => {
     boid.reproductionCooldown = 0;
     boid.predationCounter = 1e6;
     boid.energy = 0.5;
-    expect(sim.isReadyToNest(boid)).toBeFalse();
+    expect(sim.isReadyToNest(boid)).toBe(false);
     boid.energy = 0.9;
-    expect(sim.isReadyToNest(boid)).toBeTrue();
+    expect(sim.isReadyToNest(boid)).toBe(true);
     sim.foodEnabled = false;
     boid.energy = 0;
-    expect(sim.isReadyToNest(boid)).toBeTrue();
+    expect(sim.isReadyToNest(boid)).toBe(true);
   });
 
   it('should starve a boid without energy', () => {
@@ -183,7 +183,7 @@ describe('Simulation', () => {
     sim.food.erase({ x: 100, y: 100 }, 300);
     boid.energy = 0.0001;
     sim.step();
-    expect(boid.isDead).toBeTrue();
+    expect(boid.isDead).toBe(true);
   });
 
   it('should give a child the next generation, and genes within the evolution cap', () => {
@@ -196,7 +196,7 @@ describe('Simulation', () => {
     for (let i = 0; i < 50; i++) {
       const child = sim.giveBirth(parent, partner)!;
       expect(child.generation).toBe(6);
-      expect(child.isMutant).toBeTrue();
+      expect(child.isMutant).toBe(true);
       expect(child.genome.maxVelocity).toBeLessThanOrEqual(sim.boidMaxVelocity * (1 + sim.boidEvolutionCap / 100));
       expect(child.genome.maxVelocity).toBeGreaterThanOrEqual(sim.boidMaxVelocity * (1 - sim.boidEvolutionCap / 100));
     }
@@ -242,8 +242,8 @@ describe('Simulation', () => {
     const near = addBoid(sim, 100, 100);
     const far = addBoid(sim, 300, 300);
     sim.erase({ x: 105, y: 100 }, 30);
-    expect(near.isDead).toBeTrue();
-    expect(far.isDead).toBeFalse();
+    expect(near.isDead).toBe(true);
+    expect(far.isDead).toBe(false);
   });
 
   it('should start over when it gets its first size, and scale the positions on the next resizes', () => {

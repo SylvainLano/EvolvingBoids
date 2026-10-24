@@ -1,11 +1,14 @@
 // boid.component.ts
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
+import { NgClass, NgStyle } from '@angular/common';
 import { boidColor } from '../classes/BoidColor';
 
 @Component({
   selector: 'app-boid',
+  imports: [NgClass, NgStyle],
   templateUrl: './boid.component.html',
-  styleUrls: ['./boid.component.sass']
+  styleUrls: ['./boid.component.sass'],
+  changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class BoidComponent implements OnChanges {
   @Input() position!: { x: number, y: number };
