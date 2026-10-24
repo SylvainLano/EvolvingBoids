@@ -8,7 +8,7 @@ export type ChallengeState = 'running' | 'won' | 'lost';
 const SETTINGS = [
   'simulationMode', 'numberOfBoids', 'numberOfPredators', 'predatorReproductionChances', 'predatorStarvationModificator',
   'fertileAreas', 'foodEnabled', 'seasonsEnabled', 'yearDuration', 'winterFood', 'pauseSimulation',
-  'plantsEnabled', 'summerAreas', 'starvationThreshold', 'preyPerPredator', 'boidReproductionChances',
+  'plantsEnabled', 'summerAreas', 'starvationThreshold', 'preyPerPredator', 'boidReproductionChances', 'predatorSight', 'foodRegrowthRate',
 ] as const;
 type ChallengeSettings = Partial<Pick<Simulation, typeof SETTINGS[number]>>;
 
@@ -34,6 +34,7 @@ export function clock(seconds: number): string {
 // The rules of the simulation the challenges were balanced with: they stay the same when the simulation gets new features
 const BALANCED_RULES = {
   plantsEnabled: false, summerAreas: 0, starvationThreshold: 1000, preyPerPredator: 0, boidReproductionChances: 30,
+  predatorSight: 0, foodRegrowthRate: 0.0005,
 } as const;
 
 const livingBoids = (sim: Simulation) => sim.boids.filter(boid => !boid.isDead).length;
@@ -110,10 +111,9 @@ export const CHALLENGES: Challenge[] = [
     evaluate: holdOn(240, sim => livingPredators(sim) === 0),
     progress: (sim, seconds) => {
       const hunter = sim.predators.find(predator => !predator.isDead && !predator.isSuper);
-      const starvation = sim.starvationThreshold * (11 + sim.predatorStarvationModificator) / 10;
       const hunger = hunter === undefined ? 'the hunter is dead'
         : hunter.reproductionCooldown > 0 ? 'the hunter is digesting'
-        : `hunger ${Math.round(100 * hunter.predationCounter / (starvation * hunter.geneCost))} %`;
+        : `hunger ${Math.round(100 * hunter.predationCounter / sim.starvationLimit(hunter))} %`;
       return { text: `${clock(seconds)} / 4:00 - ${hunger}`, ratio: seconds / 240 };
     },
   },

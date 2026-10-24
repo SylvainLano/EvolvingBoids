@@ -64,6 +64,14 @@ export class OptionsComponent {
           { value: 'dom', label: 'DOM', title: 'Draw each boid as an HTML element, to compare performances.' },
         ],
       },
+      {
+        kind: 'choice', key: 'boidShape', label: 'Shape', options: [
+          { value: 'arrow', label: 'Arrow', title: 'Arrow heads, with the Canvas renderer.' },
+          { value: 'fish', label: 'Fish', title: 'Fish waving their tails, and sharks for the predators, with the Canvas renderer.' },
+          { value: 'bird', label: 'Bird', title: 'Birds flapping their wings, and hawks for the predators, with the Canvas renderer.' },
+          { value: 'letters', label: 'Letters', title: 'A letter for each family: a mutant gets the next one. Lowercase boids, uppercase predators, with the Canvas renderer.' },
+        ],
+      },
       toggle('darkMode', 'Dark mode'),
       toggle('glow', 'Glow', 'Additive blending and halos, with the Canvas renderer in Dark Mode.'),
       slider('trailLength', 'Trails length', 2, '', 'With the Canvas renderer.'),
@@ -92,7 +100,7 @@ export class OptionsComponent {
       slider('fertileAreas', 'Fertile areas', 1, '', 'Number of drifting areas where the plankton grows: fewer areas make the food scarcer.'),
       toggle('seasonsEnabled', 'Seasons', 'The plankton thrives in summer and fades in winter: the enduring boids get through.'),
       slider('yearDuration', 'Year length', 2, ' min', 'Length of a year, in simulated minutes.'),
-      slider('winterFood', 'Winter plankton', 10, ' %', 'Plankton the fertile areas hold in the middle of winter, in percent of the summer.'),
+      slider('winterFood', 'Winter plankton', 5, ' %', 'Plankton the fertile areas hold in the middle of winter, in percent of the summer.'),
       heading('Evolution'),
       slider('boidEvolutionChances', 'Evolution chances', 5, ' %'),
       slider('boidEvolutionCap', 'Max evolution', 5, ' %'),
@@ -100,6 +108,7 @@ export class OptionsComponent {
     ],
     Predator: [
       heading('Hunting'),
+      slider('predatorSight', 'Detection radius', 50, ' px', 'How far a predator sees the boids, before its vision gene. Without a prey in sight, it prowls slowly. 0: the whole screen, without the vision gene.'),
       toggle('predatorsCooperativeness', 'Cooperative hunt', 'Predator will try to choose a prey that is not already chased.'),
       toggle('predatorVersatility', 'Change of prey'),
       slider('predatorsSeparationRadius', 'Separation radius', 5, ' px'),

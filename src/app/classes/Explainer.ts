@@ -3,14 +3,19 @@ import type { Boid, Point } from './Boid';
 import type { Simulation, SimulationEvent } from './Simulation';
 import { SegmentField } from './SegmentField';
 
-// A place on the screen an explanation talks about: some plankton, a wall, a whole flock
+// A place on the screen an explanation talks about: some plankton, a wall, an alga
 export interface ExplanationArea {
   center: Point;
   radius: number;
 }
 
-// A bubble explains a boid (an event happened to it), an area of the screen, or the charts
-export type ExplanationAnchor = Boid | ExplanationArea | 'charts';
+// A flock an explanation talks about: it is followed as it swims
+export interface ExplanationGroup {
+  group: Boid[];
+}
+
+// A bubble explains a boid (an event happened to it), an area of the screen, a flock, the charts, or the season in the counters
+export type ExplanationAnchor = Boid | ExplanationArea | ExplanationGroup | 'charts' | 'season';
 
 export interface Explanation {
   id: string;
@@ -19,7 +24,39 @@ export interface Explanation {
 }
 
 export function isArea(anchor: ExplanationAnchor): anchor is ExplanationArea {
-  return anchor !== 'charts' && 'center' in anchor;
+  return typeof anchor !== 'string' && 'center' in anchor;
+}
+
+export function isGroup(anchor: ExplanationAnchor): anchor is ExplanationGroup {
+  return typeof anchor !== 'string' && 'group' in anchor;
+}
+
+// The explanations of a death: their boid fades away, and the bubble stays to be read
+const DEATHS = ['oldAge', 'starved', 'predatorStarved'];
+
+// What a bubble circles on the screen right now: its boid while it can be seen, its area, or its flock where it is now
+// Nothing for the charts and the season, or when the subject is gone
+export function subject(anchor: ExplanationAnchor): Boid | ExplanationArea | null {
+  if (typeof anchor === 'string') {
+    return null;
+  }
+  if (isArea(anchor)) {
+    return anchor;
+  }
+  if (isGroup(anchor)) {
+    const living = anchor.group.filter(boid => !boid.isDead);
+    if (living.length < 2) {
+      return null;
+    }
+    const center = {
+      x: living.reduce((sum, boid) => sum + boid.position.x, 0) / living.length,
+      y: living.reduce((sum, boid) => sum + boid.position.y, 0) / living.length,
+    };
+    // Around most of the flock, the boids gone astray aside
+    const distances = living.map(boid => Math.hypot(boid.position.x - center.x, boid.position.y - center.y)).sort((a, b) => a - b);
+    return { center, radius: Math.max(40, Math.min(100, distances[Math.floor(distances.length * 0.8)] + 15)) };
+  }
+  return anchor.alpha > 0.05 ? anchor : null;
 }
 
 // The "Explain me" mode: short bubbles about what happens on the screen, when it happens
@@ -28,15 +65,20 @@ export class Explainer {
   enabled = false;
   current: (Explanation & { start: number, duration: number }) | null = null;
 
-  readonly gap = 6000;                // in ms between two bubbles, while there are new things to explain
-  readonly repeatGap = 45000;         // in ms after a bubble already seen: the explanations come back now and then
+  readonly gap = 4000;                // in ms between two bubbles, while there are new things to explain
+  readonly repeatGap = 12000;         // in ms after a bubble already seen: the explanations come back now and then
   readonly skipGap = 500;             // in ms before the next bubble, when the user asks for it
-  readonly repeatDelay = 180000;      // in ms before the same explanation can come back
+  readonly repeatDelay = 150000;      // in ms before the same explanation can come back
   readonly observeInterval = 1000;    // in ms between two looks at the simulation, for the explanations of a situation
+  readonly recentEvent = 4000;        // in ms during which an event that happened during another bubble can still be explained
+  readonly lostSubject = 1500;        // in ms before the end of a bubble whose subject is gone
+  covered: (point: Point) => boolean = () => false;   // the places hidden by the interface (charts, panel, tool bar), given by the display
   private shownAt: Record<string, number> = {};
   private idleSince = -Infinity;
   private nextGap = this.gap;
   private lastObservation = -Infinity;
+  private recent: { explanation: Explanation, time: number }[] = [];
+  private seasonDue = false;
 
   // The time to read a text calmly, in real time so it doesn't depend on the speed of the simulation
   static readingTime(text: string): number {
@@ -44,14 +86,15 @@ export class Explainer {
   }
 
   // The first bubble explains the situation on the screen, starting with how a flock works
-  setEnabled(enabled: boolean, now: number, sim?: Simulation, chartsVisible = false) {
+  setEnabled(enabled: boolean, now: number, sim?: Simulation, chartsVisible = false, seasonVisible = false) {
     this.enabled = enabled;
     this.current = null;
     this.idleSince = now - this.gap;
     this.nextGap = this.gap;
     this.lastObservation = -Infinity;
+    this.recent = [];
     if (enabled && sim !== undefined) {
-      this.update(sim, now, chartsVisible);
+      this.update(sim, now, chartsVisible, seasonVisible);
     }
   }
 
@@ -66,29 +109,54 @@ export class Explainer {
     this.lastObservation = -Infinity;
   }
 
-  // An event of the simulation is explained if no other bubble is shown
+  // An event of the simulation is explained if no other bubble is shown, otherwise it is kept for a little while
+  // The capture of the boid a bubble is about is told right away: the story goes on
   notify(event: SimulationEvent, now: number) {
-    if (this.isIdle(now)) {
-      this.show(this.explainEvent(event), now);
+    if (!this.enabled) {
+      return;
+    }
+    const explanation = this.explainEvent(event);
+    if (explanation === null) {
+      return;
+    }
+    if (event.type === 'caught' && this.current !== null && this.current.anchor === event.other) {
+      this.show(explanation, now, true);
+    } else if (this.isIdle(now) && !this.seasonDue) {
+      this.show(explanation, now);
+    } else {
+      this.recent = [...this.recent.filter(event => event.explanation.id !== explanation.id), { explanation, time: now }];
     }
   }
 
-  // Called at each frame: the bubble ends, or a situation of the simulation is explained
-  update(sim: Simulation, now: number, chartsVisible: boolean) {
+  // Called at each frame: the bubble ends, soon after its subject is gone, or a situation of the simulation is explained
+  update(sim: Simulation, now: number, chartsVisible: boolean, seasonVisible = false) {
     if (!this.enabled) {
       this.current = null;
       return;
     }
-    if (this.current !== null && now - this.current.start >= this.current.duration) {
+    const current = this.current;
+    if (current !== null && subject(current.anchor) === null && typeof current.anchor !== 'string' && !DEATHS.includes(current.id)) {
+      current.duration = Math.min(current.duration, Math.max(now - current.start, this.lostSubject) + this.lostSubject);
+    }
+    if (current !== null && now - current.start >= current.duration) {
       this.current = null;
       this.idleSince = now;
     }
+    // The arrival of a season goes before the events, which wait for their turn meanwhile
+    const arrival = this.seasonArrival(sim);
+    this.seasonDue = arrival !== null && this.canShow(arrival, now);
     if (this.isIdle(now) && now - this.lastObservation >= this.observeInterval) {
       this.lastObservation = now;
-      const candidates = this.observe(sim, chartsVisible);
-      // The explanations never shown come first
-      const next = candidates.find(c => this.shownAt[c.id] === undefined) ?? candidates.find(c => this.canShow(c.id, now));
-      this.show(next ?? null, now);
+      // The arrival of a season first, then the recent events, then the other situations, the most essential first
+      this.recent = this.recent.filter(event => now - event.time < this.recentEvent && subject(event.explanation.anchor) !== null);
+      const situations = this.observe(sim, chartsVisible, seasonVisible);
+      const seasonal = (candidate: Explanation) => candidate.id === 'winter' || candidate.id === 'spring';
+      const candidates = [...situations.filter(seasonal), ...this.recent.map(event => event.explanation), ...situations.filter(c => !seasonal(c))]
+        .filter(candidate => this.canShow(candidate.id, now) && this.visible(candidate));
+      // The explanations never shown come first, then the one shown the longest ago
+      const next = candidates.find(c => this.shownAt[c.id] === undefined)
+        ?? candidates.reduce<Explanation | null>((oldest, c) => oldest === null || this.shownAt[c.id] < this.shownAt[oldest.id] ? c : oldest, null);
+      this.show(next, now);
     }
   }
 
@@ -100,13 +168,28 @@ export class Explainer {
     return this.shownAt[id] === undefined || now - this.shownAt[id] >= this.repeatDelay;
   }
 
-  private show(explanation: Explanation | null, now: number) {
-    if (explanation === null || !this.canShow(explanation.id, now)) {
+  // The subject of an explanation is on the screen, not hidden by the interface, and a dead boid is still well seen
+  private visible(explanation: Explanation): boolean {
+    if (typeof explanation.anchor === 'string') {
+      return true;
+    }
+    const circled = subject(explanation.anchor);
+    return circled !== null && !this.covered('center' in circled ? circled.center : circled.position)
+      && !(DEATHS.includes(explanation.id) && 'alpha' in circled && circled.alpha < 0.5);
+  }
+
+  // A bubble only appears when its subject can be seen, except to tell what happened to the subject of the current one
+  private show(explanation: Explanation | null, now: number, followUp = false) {
+    if (explanation === null || (!followUp && !this.canShow(explanation.id, now))) {
+      return;
+    }
+    if (followUp ? typeof explanation.anchor !== 'string' && subject(explanation.anchor) === null : !this.visible(explanation)) {
       return;
     }
     this.nextGap = this.shownAt[explanation.id] === undefined ? this.gap : this.repeatGap;
     this.current = { ...explanation, start: now, duration: Explainer.readingTime(explanation.text) };
     this.shownAt[explanation.id] = now;
+    this.recent = this.recent.filter(event => event.explanation.id !== explanation.id);
   }
 
   private explainEvent(event: SimulationEvent): Explanation | null {
@@ -134,7 +217,7 @@ export class Explainer {
       case 'starved':
         return { id: 'starved', anchor: boid, text: 'This boid starved: it spent all its energy. Swimming fast costs much more energy than swimming slowly, and good eyes cost some too.' };
       case 'predatorStarved':
-        return { id: 'predatorStarved', anchor: boid, text: 'This predator starved: it didn\'t catch anything in time. The faster a predator swims, the sooner it gets hungry.' };
+        return { id: 'predatorStarved', anchor: boid, text: 'This predator starved: it didn\'t catch anything in time. The faster a predator swims, the sooner it gets hungry, and good eyes make it hungrier. A big one lasts longer.' };
       case 'reinforcement':
         return { id: 'reinforcement', anchor: boid, text: `Only a few ${boid.isPredator ? 'predators' : 'boids'} were left: newcomers arrive from the borders, carrying the genes of their population.` };
       case 'superPredator':
@@ -152,7 +235,10 @@ export class Explainer {
     const changes = [
       { change: child.genome.maxVelocity / parent.genome.maxVelocity - 1, words: ['is faster', 'is slower'] },
       { change: parent.genome.reproductionRate / child.genome.reproductionRate - 1, words: ['is more fertile', 'is less fertile'] },
-      { change: child.genome.vision / parent.genome.vision - 1, words: ['sees the predators from farther away', 'sees the predators from closer'] },
+      {
+        change: child.genome.vision / parent.genome.vision - 1,
+        words: child.isPredator ? ['sees the boids from farther away', 'sees the boids from closer'] : ['sees the predators from farther away', 'sees the predators from closer'],
+      },
     ];
     const largest = changes.reduce((best, gene) => Math.abs(gene.change) > Math.abs(best.change) ? gene : best);
     return largest.change >= 0 ? largest.words[0] : largest.words[1];
@@ -175,36 +261,56 @@ export class Explainer {
       : { x: (richest % food.cols + 0.5) * food.cellSize, y: (Math.floor(richest / food.cols) + 0.5) * food.cellSize };
   }
 
+  // The first days of the winter or of the spring, when the plankton changes
+  private seasonArrival(sim: Simulation): 'winter' | 'spring' | null {
+    const season = sim.season;
+    if (!sim.seasonsEnabled || !sim.foodEnabled || (season.progress * 4) % 1 >= 0.25) {
+      return null;
+    }
+    return season.name === 'Winter' ? 'winter' : season.name === 'Spring' ? 'spring' : null;
+  }
+
+  // The largest flock among a few: the boids around one of them, at least 5, not hidden by the interface
+  private largestFlock(sim: Simulation, boids: Boid[]): Boid[] | null {
+    let largest: Boid[] | null = null;
+    for (const boid of boids.filter(boid => !this.covered(boid.position)).slice(0, 30)) {
+      const flock = boids.filter(other => sim.calculateDistanceSquared(boid.position, other.position) < 50 ** 2);
+      if (flock.length >= 5 && (largest === null || flock.length > largest.length)) {
+        largest = flock;
+      }
+    }
+    return largest;
+  }
+
   // The situations worth explaining right now, the most essential first
-  private observe(sim: Simulation, chartsVisible: boolean): Explanation[] {
+  private observe(sim: Simulation, chartsVisible: boolean, seasonVisible: boolean): Explanation[] {
     const boids = sim.boids.filter(boid => !boid.isDead);
+    const predators = sim.predators.filter(predator => !predator.isDead && !predator.isSuper);
+    const flock = this.largestFlock(sim, boids);
+    const seen = (boid: Boid) => !this.covered(boid.position);
     const candidates: Explanation[] = [];
 
-    // The first days of the winter and of the spring, around the plankton that changes
-    const season = sim.season;
-    const seasonStarted = (season.progress * 4) % 1 < 0.25;
-    if (sim.seasonsEnabled && sim.foodEnabled && seasonStarted && (season.name === 'Winter' || season.name === 'Spring')) {
-      const center = this.richestPlankton(sim) ?? { x: sim.width / 2, y: sim.height / 2 };
-      candidates.push(season.name === 'Winter'
-        ? { id: 'winter', anchor: { center, radius: 70 }, text: 'Winter: the plankton grows back slowly, the fertile areas shrink and the algae wither. The enduring boids survive best: the big and slow ones, with short sight.' }
-        : { id: 'spring', anchor: { center, radius: 70 }, text: 'Spring: the plankton blooms again, new algae sprout, and the flocks grow back. Food is plenty, so speed and good eyes are worth what they cost.' });
-    }
-
-    // A flock: the boids around one of them
-    for (const boid of boids.slice(0, 30)) {
-      const flock = boids.filter(other => sim.calculateDistanceSquared(boid.position, other.position) < 50 ** 2);
-      if (flock.length >= 5) {
-        const center = {
-          x: flock.reduce((sum, other) => sum + other.position.x, 0) / flock.length,
-          y: flock.reduce((sum, other) => sum + other.position.y, 0) / flock.length,
-        };
-        candidates.push({ id: 'flocking', anchor: { center, radius: 60 }, text: 'Each boid follows three simple rules: stay close to its neighbors, go the same way, and keep some room. The flocks emerge from these rules alone.' });
-        break;
+    // The first days of the winter and of the spring: next to the season in the counters, or around the plankton or a flock
+    const arrival = this.seasonArrival(sim);
+    if (arrival !== null) {
+      const plankton = this.richestPlankton(sim);
+      const anchor: ExplanationAnchor | null = seasonVisible ? 'season'
+        : plankton !== null ? { center: plankton, radius: 70 }
+        : flock !== null ? { group: flock } : null;
+      if (anchor !== null) {
+        candidates.push(arrival === 'winter'
+          ? { id: 'winter', anchor, text: 'Winter: the plankton grows back slowly, the fertile areas shrink and the algae die. The enduring boids survive best: the big and slow ones, with short sight.' }
+          : { id: 'spring', anchor, text: 'Spring: the plankton blooms again, new algae sprout, and the flocks grow back. Food is plenty, so speed and good eyes are worth what they cost.' });
       }
     }
 
+    // A flock, followed as it swims
+    if (flock !== null) {
+      candidates.push({ id: 'flocking', anchor: { group: flock }, text: 'Each boid follows three simple rules: stay close to its neighbors, go the same way, and keep some room. The flocks emerge from these rules alone.' });
+    }
+
     // A boid chased by a predator close to it
-    const chased = boids.find(boid => boid.preyLink !== null && sim.calculateDistanceSquared(boid.position, boid.preyLink.position) < 80 ** 2);
+    const chased = boids.find(boid => seen(boid) && boid.preyLink !== null && sim.calculateDistanceSquared(boid.position, boid.preyLink.position) < 80 ** 2);
     if (chased) {
       candidates.push({ id: 'flee', anchor: chased, text: 'This boid is chased by a predator: it flees, its neighbors flee too, and the whole flock swerves.' });
     }
@@ -217,26 +323,40 @@ export class Explainer {
 
     // A grown alga, far enough from the borders for its circle to be seen
     const alga = sim.foodEnabled && sim.plantsEnabled
-      ? sim.plants.plants.find(plant => plant.biomass > 1 && plant.x > 90 && plant.x < sim.width - 90 && plant.y > 90 && plant.y < sim.height - 90)
+      ? sim.plants.plants.find(plant => !this.covered(plant) && plant.biomass > 1 && plant.x > 90 && plant.x < sim.width - 90 && plant.y > 90 && plant.y < sim.height - 90)
       : undefined;
     if (alga) {
-      candidates.push({ id: 'plants', anchor: { center: { x: alga.x, y: alga.y }, radius: sim.plants.radius(alga) + 15 }, text: 'These algae grow in place, and the boids nibble them when they are hungry. They sow their seeds in summer, wither in winter, and may disappear before new ones sprout in spring.' });
+      candidates.push({ id: 'plants', anchor: { center: { x: alga.x, y: alga.y - 8 }, radius: sim.plants.radius(alga) + 15 }, text: 'These algae grow in place, and the flocks graze them: their roots stay, so they grow back. They sow their seeds in summer, and few of them survive the winter.' });
+    }
+
+    // A predator that sees no prey: it prowls
+    const prowler = sim.predatorSight > 0 ? predators.find(predator => seen(predator) && predator.aim === null && predator.reproductionCooldown === 0) : undefined;
+    if (prowler) {
+      candidates.push({ id: 'prowl', anchor: prowler, text: 'This predator sees no prey: it prowls slowly to save its strength, back where it saw the last one, then at random. Hold Shift over it to see how far it sees.' });
+    }
+
+    // A predator with keen or poor eyes
+    const sharpEyed = sim.predatorSight > 0 ? predators.find(predator => seen(predator) && Math.abs(predator.genome.vision - 1) >= 0.1) : undefined;
+    if (sharpEyed) {
+      candidates.push({ id: 'predatorVision', anchor: sharpEyed, text: sharpEyed.genome.vision > 1
+        ? 'This predator has keen eyes: it spots the flocks from farther away, but good eyes make it hungry sooner. Against it, the boids that see far flee sooner: an arms race.'
+        : 'This predator is short-sighted: it finds fewer flocks, but it gets hungry later. Whether good eyes are worth what they cost depends on how many boids there are to find.' });
     }
 
     // A boid of a lineage whose color drifted away from the first boids
-    const colorful = boids.find(boid => Math.abs(boid.genome.lineage) >= 0.4);
+    const colorful = boids.find(boid => seen(boid) && Math.abs(boid.genome.lineage) >= 0.4);
     if (colorful) {
       candidates.push({ id: 'colors', anchor: colorful, text: 'The colors show the families: a child takes the color of a parent, and only a mutant gets a new shade. A color that spreads is a lineage that thrives.' });
     }
 
     // A boid much bigger or smaller than the others
-    const sized = boids.find(boid => Math.abs(boid.size - 1) >= 0.15);
+    const sized = boids.find(boid => seen(boid) && Math.abs(boid.size - 1) >= 0.15);
     if (sized) {
       candidates.push({ id: 'size', anchor: sized, text: 'The size shows the speed: big boids are slow but enduring, their energy lasts longer. Small ones are fast and escape the predators, but they tire sooner.' });
     }
 
     // A boid seeing far
-    const watchful = boids.find(boid => boid.genome.vision >= 1.15);
+    const watchful = boids.find(boid => seen(boid) && boid.genome.vision >= 1.15);
     if (watchful) {
       candidates.push({ id: 'vision', anchor: watchful, text: 'This boid sees the predators from far away and flees sooner, but good eyes cost energy. Hold Shift over a boid to see how far it sees.' });
     }

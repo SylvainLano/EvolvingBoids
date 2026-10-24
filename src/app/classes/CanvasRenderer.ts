@@ -10,16 +10,26 @@ export interface MutantHalo {
   start: number;      // performance.now() at birth, the halo lasts in real time so it stays visible when the simulation is sped up
 }
 
+// How the boids are drawn: arrow heads, fish and sharks, birds and hawks, or the letter of their family
+export type BoidShape = 'arrow' | 'fish' | 'bird' | 'letters';
+
 export interface RenderOptions {
   darkMode: boolean;
   glow: boolean;                  // additive blending and halos, only visible in dark mode
   displayQuadtreeCount: boolean;
+  shape: BoidShape;
+}
+
+// What a bubble of the Explain mode circles: a boid or an area, and the bubble itself, linked to it by a thin line
+export interface Explained {
+  subject: Boid | { center: Point, radius: number };
+  bubble: { x: number, y: number, width: number, height: number } | null;
 }
 
 // What the user drew with the mouse tools
 export interface WorldDrawing {
   food: { texture: HTMLCanvasElement, width: number, height: number } | null;   // one pixel per cell, scaled up
-  plants: { plants: Plant[], reach: (plant: Plant) => number, color: string } | null;   // how far each one has grown, the color of the season
+  plants: { plants: Plant[], reach: (plant: Plant) => number, scale: (plant: Plant) => number, color: string } | null;   // how far and how big each one has grown, the color of the season
   obstacles: Point[][];
   currents: Point[][];
   currentWidth: number;                                                     // width of the band carrying the boids
@@ -40,6 +50,8 @@ export class CanvasRenderer {
   private readonly currentDashSpeed = 0.03;   // in px per ms, the dashes of a current flow in its direction
   private readonly plantWidths = [1.5, 1.1, 0.8];   // in px, of the trunk of a grown alga, of its branches and of theirs
   private haloSprites = new Map<string, HTMLCanvasElement>();
+  private beats = new WeakMap<Boid, { value: number, time: number }>();   // the beat of the tail or of the wings of each boid
+  private letterFont = '';                    // the font of the letters is only set when it changes, it is costly
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -62,12 +74,13 @@ export class CanvasRenderer {
   }
 
   // Groups are drawn in order, so the last one is on top
-  // The inspected boid is circled, with how far it sees the predators when it has the vision gene
+  // The inspected boid is circled, with how far it sees when its sight is limited
   render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[],
-    highlighted: { boid: Boid, sight: number | null } | null, explained: Boid | { center: Point, radius: number } | null, world: WorldDrawing) {
+    highlighted: { boid: Boid, sight: number | null } | null, explained: Explained | null, world: WorldDrawing) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
     const now = performance.now();
+    this.letterFont = '';
 
     // An opaque background, so the additive blending of the glow is computed against it
     ctx.globalCompositeOperation = 'source-over';
@@ -88,7 +101,7 @@ export class CanvasRenderer {
     // The algae grow on the sea floor, under everything else
     if (world.plants !== null) {
       for (const plant of world.plants.plants) {
-        this.drawPlant(plant, world.plants.reach(plant), world.plants.color);
+        this.drawPlant(plant, world.plants.reach(plant), world.plants.scale(plant), world.plants.color);
       }
     }
 
@@ -122,7 +135,7 @@ export class CanvasRenderer {
         }
       }
       for (const boid of group) {
-        this.drawBody(boid, options.darkMode);
+        this.drawBody(boid, options.darkMode, options.shape, now);
       }
     }
 
@@ -146,15 +159,14 @@ export class CanvasRenderer {
     return boidColor(boid.isPredator, boid.isDead, boid.genome.lineage, boid.alpha, darkMode, opacity, boid.isSuper);
   }
 
-  // A small tree, drawn as far as it has grown from its root: the last segment is drawn in part
+  // A small tree, drawn as far as it has grown from its root, at its size: the last segment is drawn in part
   // The trunk is thicker than the branches, and they all get thicker as the alga grows
-  private drawPlant(plant: Plant, reach: number, color: string) {
+  private drawPlant(plant: Plant, reach: number, scale: number, color: string) {
     const ctx = this.ctx;
-    const growth = 0.5 + 0.5 * Math.min(1, reach / plant.length);
     ctx.strokeStyle = color;
     ctx.lineCap = 'round';
     for (let depth = 0; depth < this.plantWidths.length; depth++) {
-      ctx.lineWidth = this.plantWidths[depth] * growth;
+      ctx.lineWidth = this.plantWidths[depth] * scale;
       ctx.beginPath();
       for (const segment of plant.twig) {
         if (segment.depth !== depth || segment.from >= reach) {
@@ -162,8 +174,8 @@ export class CanvasRenderer {
         }
         const length = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
         const part = Math.min(1, (reach - segment.from) / length);
-        ctx.moveTo(plant.x + segment.x1, plant.y + segment.y1);
-        ctx.lineTo(plant.x + segment.x1 + (segment.x2 - segment.x1) * part, plant.y + segment.y1 + (segment.y2 - segment.y1) * part);
+        ctx.moveTo(plant.x + segment.x1 * scale, plant.y + segment.y1 * scale);
+        ctx.lineTo(plant.x + (segment.x1 + (segment.x2 - segment.x1) * part) * scale, plant.y + (segment.y1 + (segment.y2 - segment.y1) * part) * scale);
       }
       ctx.stroke();
     }
@@ -261,21 +273,44 @@ export class CanvasRenderer {
     }
   }
 
-  // A gently pulsing amber ring around what a bubble explains: a boid, or a whole area with a dashed line
-  private drawExplained(explained: Boid | { center: Point, radius: number }, now: number) {
+  // A gently pulsing amber ring around what a bubble explains: a boid, or a whole area with a dashed line,
+  // and a thin line from the bubble to the ring, when they are apart
+  private drawExplained(explained: Explained, now: number) {
     const ctx = this.ctx;
+    const subject = explained.subject;
     const pulse = 1 + 0.1 * Math.sin(now / 250);
-    const isArea = 'center' in explained;
-    const center = isArea ? explained.center : explained.position;
+    const isArea = 'center' in subject;
+    const center = isArea ? subject.center : subject.position;
+    const radius = (isArea ? subject.radius : this.bodyLength(subject) * 1.8) * pulse;
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
     if (isArea) {
       ctx.setLineDash([8, 6]);
     }
     ctx.beginPath();
-    ctx.arc(center.x, center.y, (isArea ? explained.radius : this.bodyLength(explained) * 1.8) * pulse, 0, Math.PI * 2);
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    const bubble = explained.bubble;
+    if (bubble === null) {
+      return;
+    }
+    // From the closest point of the bubble to the edge of the ring
+    const from = {
+      x: Math.min(bubble.x + bubble.width, Math.max(bubble.x, center.x)),
+      y: Math.min(bubble.y + bubble.height, Math.max(bubble.y, center.y)),
+    };
+    const distance = Math.hypot(from.x - center.x, from.y - center.y);
+    if (distance <= radius + 8) {
+      return;
+    }
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(center.x + (from.x - center.x) * radius / distance, center.y + (from.y - center.y) * radius / distance);
+    ctx.stroke();
   }
 
   private drawQuadtrees(quadtrees: Quadtree[], options: RenderOptions) {
@@ -360,27 +395,121 @@ export class CanvasRenderer {
     return sprite;
   }
 
-  // An arrow head pointing in the direction of the velocity
-  private drawBody(boid: Boid, darkMode: boolean) {
+  // The body of a boid in the chosen shape, pointing in the direction of its velocity
+  // The fish and the birds are drawn a bit bigger than the arrows, for their shape to be seen
+  private drawBody(boid: Boid, darkMode: boolean, shape: BoidShape, now: number) {
     const ctx = this.ctx;
-    const length = this.bodyLength(boid) * (boid.isDead ? 2 - boid.alpha : 1);
-    const halfWidth = length * 0.375;
+    const length = this.bodyLength(boid) * (boid.isDead ? 2 - boid.alpha : 1) * (shape === 'fish' || shape === 'bird' ? 1.4 : 1);
+    ctx.fillStyle = this.color(boid, darkMode);
+    if (shape === 'letters') {
+      this.drawLetter(boid, length);
+      return;
+    }
     const angle = Math.atan2(boid.velocity.y, boid.velocity.x);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const { x, y } = boid.position;
-    // Local point (forward, side) rotated to the screen
+    // Local point (forward, side), in body lengths, rotated to the screen
     const point = (forward: number, side: number) => {
-      ctx.lineTo(x + forward * cos - side * sin, y + forward * sin + side * cos);
+      ctx.lineTo(x + (forward * cos - side * sin) * length, y + (forward * sin + side * cos) * length);
     };
 
-    ctx.fillStyle = this.color(boid, darkMode);
     ctx.beginPath();
-    point(length * 0.6, 0);
-    point(-length * 0.4, halfWidth);
-    point(-length * 0.15, 0);
-    point(-length * 0.4, -halfWidth);
+    if (shape === 'fish') {
+      this.fishPath(boid, point, now);
+    } else if (shape === 'bird') {
+      this.birdPath(boid, point, now);
+    } else {
+      point(0.6, 0);
+      point(-0.4, 0.375);
+      point(-0.15, 0);
+      point(-0.4, -0.375);
+    }
     ctx.closePath();
     ctx.fill();
+  }
+
+  // Where a boid is in the beat of its tail or of its wings: the faster it swims the faster it beats, a dead one stops
+  private beat(boid: Boid, now: number, rate: number): number {
+    let phase = this.beats.get(boid);
+    if (phase === undefined) {
+      phase = { value: Math.random() * Math.PI * 2, time: now };
+      this.beats.set(boid, phase);
+    }
+    if (!boid.isDead) {
+      const speed = Math.sqrt(boid.velocity.x ** 2 + boid.velocity.y ** 2);
+      phase.value += (now - phase.time) * rate * (0.4 + speed);
+    }
+    phase.time = now;
+    return phase.value;
+  }
+
+  // A fish seen from above, its tail waving, or a shark with its pectoral fins and its crescent tail
+  private fishPath(boid: Boid, point: (forward: number, side: number) => void, now: number) {
+    const wave = Math.sin(this.beat(boid, now, 0.006)) * 0.1;
+    if (boid.isPredator) {
+      point(0.6, 0);
+      point(0.3, 0.1);
+      point(0.1, 0.13);
+      point(-0.08, 0.32);
+      point(-0.05, 0.11);
+      point(-0.32, 0.05 + wave * 0.6);
+      point(-0.6, 0.24 + wave * 1.6);
+      point(-0.48, wave);
+      point(-0.6, -0.18 + wave * 1.6);
+      point(-0.32, -0.05 + wave * 0.6);
+      point(-0.05, -0.11);
+      point(-0.08, -0.32);
+      point(0.1, -0.13);
+      point(0.3, -0.1);
+    } else {
+      point(0.55, 0);
+      point(0.3, 0.17);
+      point(-0.05, 0.17);
+      point(-0.3, 0.05 + wave * 0.6);
+      point(-0.55, 0.22 + wave * 1.6);
+      point(-0.45, wave);
+      point(-0.55, -0.22 + wave * 1.6);
+      point(-0.3, -0.05 + wave * 0.6);
+      point(-0.05, -0.17);
+      point(0.3, -0.17);
+    }
+  }
+
+  // A bird seen from above, flapping its wings, or a hawk with wider wings and a forked tail
+  private birdPath(boid: Boid, point: (forward: number, side: number) => void, now: number) {
+    const flap = 0.5 + 0.5 * Math.cos(this.beat(boid, now, 0.012));
+    const span = (boid.isPredator ? 0.42 : 0.3) + (boid.isPredator ? 0.36 : 0.32) * flap;
+    const sweep = -0.05 - 0.1 * flap;
+    point(0.5, 0);
+    point(0.18, 0.08);
+    point(sweep, span);
+    point(-0.12, 0.08);
+    if (boid.isPredator) {
+      point(-0.5, 0.14);
+      point(-0.38, 0);
+      point(-0.5, -0.14);
+    } else {
+      point(-0.42, 0.09);
+      point(-0.42, -0.09);
+    }
+    point(-0.12, -0.08);
+    point(sweep, -span);
+    point(0.18, -0.08);
+  }
+
+  // The letter of the family of a boid, from the shade of its lineage: a mutant gets the next or the previous one
+  // Lowercase for the boids, uppercase for the predators, and an omega for the Super Predators
+  private drawLetter(boid: Boid, length: number) {
+    const ctx = this.ctx;
+    const letter = boid.isSuper ? 'Ω' : 'abcdefghi'[Math.round((boid.genome.lineage + 1) / 0.25)] ?? 'e';
+    const font = `bold ${Math.round(length * 1.4)}px Monaco, monospace`;
+    if (font !== this.letterFont) {
+      ctx.font = font;
+      this.letterFont = font;
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(boid.isPredator && !boid.isSuper ? letter.toUpperCase() : letter, boid.position.x, boid.position.y);
   }
 }

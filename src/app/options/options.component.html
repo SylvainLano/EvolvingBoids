@@ -7,7 +7,7 @@
                 <div class="counter counter-boids"><span class="counter-name">Boids</span><span class="counter-value">{{ app.sim.totalBoids }}</span><span class="counter-detail">gen {{ app.sim.stats.maxBoidGeneration }}</span></div>
                 <div class="counter counter-predators"><span class="counter-name">Predators</span><span class="counter-value">{{ app.sim.totalPredators }}</span><span class="counter-detail">gen {{ app.sim.stats.maxPredatorGeneration }}</span></div>
                 @if (app.sim.seasonsEnabled) {
-                    <div class="counter" [style.color]="app.seasonColor"><span class="counter-name">{{ app.sim.season.name }}</span><span class="counter-value"></span><span class="counter-detail">year {{ app.sim.season.year }}</span></div>
+                    <div class="counter counter-season" [class.counter-explained]="app.explainingSeason" [style.color]="app.seasonColor"><span class="counter-name">{{ app.sim.season.name }}</span><span class="counter-value"></span><span class="counter-detail">year {{ app.sim.season.year }}</span></div>
                 }
             }
             @if (app.displayFPSCount) {

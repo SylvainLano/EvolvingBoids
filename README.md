@@ -7,6 +7,7 @@
 - The simulation runs at a fixed 60 steps per second, whatever the screen refresh rate  
 - Angular runs without zone.js: the animation loop refreshes the view itself, the counters 5 times per second  
 - Boids are drawn on a Canvas by default, with trails and, in Dark Mode, a glow  
+- Their shape is chosen in the Display Options: arrow heads, fish waving their tails (sharks for the predators), birds flapping their wings (hawks for the predators), or the letter of their family (lowercase boids, uppercase predators, a mutant gets the next or the previous letter)  
 - The simulation starts in Dark Mode, without the Quadtree drawn: both can be changed in the Display Options  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
@@ -15,23 +16,24 @@
 - Regular Boids eat plankton, drawn as a glowing mist, that grows in fertile areas slowly drifting across the screen: the flocks graze and migrate to follow it  
 - There is a single fertile area by default, and a second one in summer with the seasons: the number can be modified in the Boids Options  
 - Boids are drawn to the plankton, all the more when hungry: with 3 fertile areas, they stay about 3 times more in them than by chance  
-- A grazed area grows back like grass, the plankton left behind by a drifting area fades away  
+- A grazed area grows back like grass, about two thirds in 40 seconds, the plankton left behind by a drifting area fades away  
 - Boids spend energy to live, and much more to swim fast (with the square of the speed), they look for food when hungry and starve without energy  
 - A boid needs 80 % of energy to nest, and each parent spends 30 % at a birth, given to the child  
 - The plankton can be disabled in the Boids Options, the boids then don't need food anymore  
 
 ### The Seasons
 - A year lasts 8 simulated minutes (4 to 20 in the Boids Options), from spring to winter. The simulation starts at the end of spring, when the plankton is nearly at its best  
-- In winter the fertile areas hold much less plankton, 20 % of the summer by default ("Winter plankton %"), and the mist turns icy blue: the births stop, and the boids that spend too much energy starve  
+- In winter the fertile areas hold much less plankton, 15 % of the summer by default ("Winter plankton %"), and the mist turns icy blue: the births stop, the algae die, and the boids that spend too much energy starve  
 - The season and the year are shown under the counters, the winters are shaded behind the charts  
-- With the defaults, the flocks grow to about a hundred boids in summer and autumn, and fall back to about 30 in winter, where the Infinite mode tops them up with a few newcomers (measured over 3 years)  
+- With the defaults, the flocks grow to 60 to 110 boids in summer and autumn, and fall back to 30 to 60 in winter, where the Infinite mode tops them up with a few newcomers (measured over 3 years)  
 - The seasons can be switched off in the Boids Options. The demo always has them, the challenges balanced before them don't  
 
 ### The Algae
-- Algae grow in place on the sea floor, drawn as small trees without leaves, growing up and forking diagonally now and then, taller with the food they hold, and the hungry boids nibble them: a flock can settle on a meadow of algae, or follow the drifting plankton  
-- The sea starts with 4 algae. In spring and summer they grow, and the grown ones sow their seeds around them, so they spread into meadows (up to 1 alga per 25000 px²)  
-- In autumn they turn yellow, in winter they turn brown, shrink and may disappear. When fewer than 4 are left, new ones sprout in spring  
-- A large flock can graze a meadow down to nothing, it grows back from the seeds of the others  
+- Algae grow in place on the sea floor, drawn as small trees without leaves: a short trunk going up, that soon forks into branches spreading wide, some bending up, others drooping. A sprout is a short stem, its branches show as it grows, then the whole tree keeps getting bigger with the food it holds  
+- The boids see the grown algae within 200 px, and they are drawn to them twice as much as to the plankton around: the flocks graze the meadows, which give them up to half of their food in summer and autumn  
+- The boids can't eat the roots: a grazed alga shrinks back to a stem, then grows back. Only the winter kills them  
+- The sea starts with 4 algae. In spring and summer they grow, and the grown ones sow a seed about every 80 seconds, so they spread into meadows of 10 to 25 algae by the autumn (up to 1 alga per 25000 px²)  
+- In autumn they turn yellow, in winter they turn brown, wither, and nearly all of them die before the spring. When fewer than 4 are left, new ones sprout in spring  
 - The Plant tool adds an alga with a click, the Eraser pulls them out. They can be switched off in the Boids Options  
 
 ### The Mouse Tools
@@ -65,9 +67,10 @@
 
 ### The Explain Mode
 - The Explain button, at the top next to the tools, or the E key, shows short bubbles about what happens on the screen, when it happens. On the first visit, the button glows and pulses to catch the eye  
-- A bubble stands still next to what it explains, circled in amber: the boid an event happened to, or an area of the screen (a flock, the plankton, a wall). It stands on the side of the center of the screen, so no edge cuts it  
-- It starts with how a flock works, then explains the births, the mutants, the captures, the predators giving up a chase, the deaths of old age and of hunger, the reinforcements, the Super Predators, the round generations, the fleeing flocks, the plankton, the algae, the arrival of the winter and of the spring, the colors of the lineages, the size, the vision, the walls and the charts  
-- One bubble at a time, long enough to read it calmly (a bar shows the time left), a click on the bubble or the Enter key shows the next one. Every explanation is shown once, then comes back now and then  
+- A bubble stands still next to what it explains, circled in amber: the boid an event happened to, a flock followed as it swims, an area of the screen (the plankton, an alga, a wall), or the season, circled in the counters. It stands on the side of the center of the screen, so no edge cuts it  
+- A thin line links the bubble to its subject, and the bubble glides closer when its subject swims far away. A bubble only appears when its subject is on the screen, and ends soon when it is gone: the capture of a chased boid is told right away. A dead boid fades away, its bubble stays to be read  
+- It starts with how a flock works, then explains the births, the mutants, the captures, the predators giving up a chase or prowling without a prey in sight, their eyes, the deaths of old age and of hunger, the reinforcements, the Super Predators, the round generations, the fleeing flocks, the plankton, the algae, the arrival of the winter and of the spring, the colors of the lineages, the size, the vision, the walls and the charts  
+- One bubble at a time, long enough to read it calmly (a bar shows the time left), a click on the bubble or the Enter key shows the next one. The next bubble comes 4 seconds later while there are new things to explain, 12 seconds later otherwise, and an event that happened during another bubble can still be explained for 4 seconds. Every explanation is shown once, then comes back now and then, the one shown the longest ago first  
 
 ### The Challenges
 - Six challenges, in the Challenges Options, each with its own starting conditions and its own mouse tools (some with a limited number of uses):  
@@ -77,17 +80,17 @@
   - Arms Race: bring the average speed of the boids to +10 % within 20 minutes  
   - Slow and Steady: bring the average speed of the boids to -6 % within 20 minutes  
   - Three Winters: keep at least 20 boids alive until the end of the third harsh winter, without reinforcement (6 minutes years, 2 fertile areas, 5 % of plankton in winter)  
-- Each challenge keeps the rules it was balanced with: the challenges made before the seasons are played without them, and none of them has algae, the summer fertile area, nor the new balance of the predators  
+- Each challenge keeps the rules it was balanced with: the challenges made before the seasons are played without them, and none of them has algae, the summer fertile area, the slower plankton, the new balance of the predators, nor their limited sight  
 - The menu shows one line per challenge, a click unfolds its goal and its Start button. The hint is shown in the card of the running challenge  
 - The time is the simulated time, so the speed can be raised. A card shows the goal and the progress, the simulation pauses when the challenge is won or lost  
 - The settings of the user are restored when the challenge is closed, and the completed challenges are remembered in the browser  
 - Each challenge was checked by simulation: lost without any action, won with a simple strategy  
 
 ### The Charts and the Speed
-- Live charts show the populations, the plankton (compared to what the fertile areas can hold), the number of algae, the average speed and fertility of each species and the average vision of the boids, compared to their defaults, over the last 15 simulated minutes, with the winters shaded  
+- Live charts show the populations, the plankton (compared to what the fertile areas can hold), the number of algae, the average speed, fertility and vision of each species, compared to their defaults, over the last 15 simulated minutes, with the winters shaded  
 - The highest generation of each species is displayed with the boid counts  
 - A ring spreads around each newborn mutant  
-- Holding Shift and hovering a boid shows its generation, genes (with its endurance, and how far it sees, also drawn as a dashed circle), and age (or hunger for a Predator), the mouse then doesn't scare the boids. When the mouse stops, the card stands still to be read and its boid stays circled, until the mouse moves or Shift is released  
+- Holding Shift and hovering a boid or a predator shows its generation, genes (with its endurance, and how far it sees, also drawn as a dashed circle), and age (or hunger for a Predator), the mouse then doesn't scare the boids. When the mouse stops, the card stands still to be read and its boid stays circled, until the mouse moves or Shift is released  
 - The simulation can be sped up x2, x4 or x8 in the Simulation Options, or with the + and - keys, to watch the evolution  
 
 ### The Demo Mode
@@ -110,8 +113,10 @@
 - Regular Boids need a partner to reproduce, heading roughly the same way, and both should have had some quiet time with no fleeing  
 - Regular Boids reproduce less as the screen gets crowded (logistic growth), and stop at 1 boid per 4000 px²  
 - Regular Boids die of old age after about 3 minutes (+/- 20 %), the lifespan can be modified in the options, 0 makes them immortal  
-- Predators only need to eat to reproduce, but must calm down after eating. After a meal, a predator has 20 % of chances to breed, only when there are at least 25 boids per predator: they neither swarm nor die out (0 to 3 extinctions in 24 minutes, against about 25 before), and a predator starves about 20 seconds after its last meal  
-- All Boids carry a Genome with a Maximum Velocity, a Reproduction Rate and a Lineage (the color of the family), and Regular Boids a Vision, all altered by evolution  
+- Predators only need to eat to reproduce, but must calm down after eating. After a meal, a predator has 20 % of chances to breed, only when there are at least 25 boids per predator: they neither swarm nor die out (2 to 4 reinforcements in 24 minutes), and a predator starves about 20 seconds after its last meal  
+- Predators see the boids within 200 px (the Detection radius of the Predators Options), and not through the walls. Without a prey in sight, a predator prowls at 60 % of its speed to save its strength: back where it saw the last one, then at random. With a radius of 0, they see the whole screen and head for the last births, as before  
+- Their eyes matter: 4 predators among 50 boids catch about 3.7 boids per minute each when they see 100 px around, 4.7 at 200 px, 5.8 when they see the whole screen  
+- All Boids carry a Genome with a Maximum Velocity, a Reproduction Rate, a Vision and a Lineage (the color of the family), all altered by evolution (the Predators only evolve their Vision when they don't see the whole screen)  
 - All Boids have a Reproduction Chance, an Evolution Chance and an Evolution Cap that can be modified in the options  
 
 ### Evolutions
@@ -123,8 +128,10 @@
 - In Infinite mode, reinforcements arrive when fewer than 30 Regular Boids are left (a few boids can hardly find partners), or when no Predator is left  
 - Reinforcements (Infinite mode, Demo Mode) inherit the genes of the living population, or of the last 30 dead individuals if the species is extinct  
 - The Reproduction Rate shortens both the cooldown and, for Regular Boids, the quiet time needed to nest  
-- The size shows the speed, which goes against the endurance: a boid 10 % faster is 15 % smaller, a slower one bigger. A big body lasts longer, the energy of a boid goes as far as the square root of its size: the small fast boids escape the predators, the big slow ones get through the winters  
-- The Vision of a Regular Boid sets how far it sees the predators, from 0.5 to 1.5 times the Predator Detection Radius: it flees sooner, but its good eyes cost energy (+30 % of the energy spent at the default speed for +50 % of vision, at the default gene cost), and fleeing more often leaves less quiet time to nest. Without plankton, good eyes shorten the life instead. The Predators see the whole screen, they don't have this gene  
+- The size shows the speed, which goes against the endurance: a boid 10 % faster is 15 % smaller, a slower one bigger. A big body lasts longer: the energy of a boid, and the time a predator can go without eating, go as far as the square root of its size. The small fast boids escape the predators, the big slow ones get through the winters  
+- The Vision of a Regular Boid sets how far it sees the predators, from 0.5 to 1.5 times the Predator Detection Radius of the Boids Options: it flees sooner, but its good eyes cost energy (+30 % of the energy spent at the default speed for +50 % of vision, at the default gene cost), and fleeing more often leaves less quiet time to nest. Without plankton, good eyes shorten the life instead  
+- The Vision of a Predator sets how far it sees the boids, from 0.5 to 1.5 times its Detection Radius: it finds the flocks sooner, but good eyes make it hungry sooner (+50 % of vision makes a predator chasing at full speed a fifth hungrier). With 2 or 3 predators, chance weighs as much as selection on this gene: its curve wanders within a few percent  
+- Aiming ahead of the prey was tried for the predators, as a gene: it doesn't catch more boids, they swerve, so the predators aim one step ahead of their prey  
 - The color is the mark of a family: a child takes the color of one of its parents, only a mutant gets a new shade, so the lineages can be seen spreading or dying out:  
   - Regular Boids start blue, and drift toward green and nearly yellow, or toward deep violet  
   - Predators start red, and drift toward orange, or toward mauve  
@@ -146,11 +153,9 @@
 - They run with Vitest in a headless Chromium driven by Playwright, as the components draw on real canvases: set `CHROME_BIN` to the installed Chrome, or run `npx playwright install chromium` once  
 
 ### Todos
-- Add different skins (or letters) for boid
 - Add more evolutions 
 
 ### Futures developments and ideas
 - Deus Ex Machina Mode and/or low FPS : Spawn a Super Predator automatically
 - Add a field of view (the line of sight is already blocked by the walls)  
-- Add movement anticipation for predators
-- A gene for the predators (vision, endurance), now that they keep a steady population  
+- A Hide and Seek challenge, with short-sighted predators and flocks hidden behind walls: the first tries were too random to be balanced  

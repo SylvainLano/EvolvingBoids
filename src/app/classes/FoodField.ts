@@ -20,7 +20,7 @@ export class FoodField {
   capacity = new Float32Array(0);       // maximum quantity of food in each cell, given by the patches
 
   readonly patchSpeed = 0.15;          // in px per step: a patch crosses the screen in a couple of minutes
-  readonly regrowthRate = 0.0005;       // part of the missing food growing back per step: a grazed cell is 63 % full again after 2000 steps
+  regrowthRate = 0.0004;                // part of the missing food growing back per step: a grazed cell is 63 % full again after 2500 steps
   readonly decayRate = 0.0005;          // decay per step of the food above the capacity (sown or left by a patch)
   productivity = 1;                     // the season: the fertile areas hold less in winter, so less grows back
   private patches: Patch[] = [];

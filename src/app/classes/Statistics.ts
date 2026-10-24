@@ -9,7 +9,8 @@ export interface StatsSample {
   predatorSpeed: number;
   boidFertility: number;
   predatorFertility: number;
-  boidVision: number;           // only the boids have the vision gene
+  boidVision: number;
+  predatorVision: number;       // NaN when the predators see the whole screen
   food: number;                 // plankton compared to what the fertile areas can hold, in percent, NaN without plankton
   plants: number;               // number of algae, NaN without them
   winter: boolean;              // drawn as a band behind the charts
@@ -38,7 +39,7 @@ export class Statistics {
   // Called at each simulation step, records a sample at regular intervals
   // The food ratio is only computed when a sample is recorded
   step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults, foodRatio: () => number,
-    winter: boolean, plants: number) {
+    winter: boolean, plants: number, predatorVision: boolean) {
     if (++this.stepsSinceSample < this.sampleInterval && this.samples.length > 0) {
       return;
     }
@@ -47,16 +48,17 @@ export class Statistics {
     // Super Predators are a tool of the user, not part of the evolution
     const livingPredators = predators.filter(predator => !predator.isDead && !predator.isSuper);
     const boidGenes = this.averageGenes(boids, boidDefaults);
-    const predatorGenes = this.averageGenes(livingPredators, predatorDefaults);
+    const predatorAverages = this.averageGenes(livingPredators, predatorDefaults);
 
     this.samples.push({
       boids: boids.length,
       predators: livingPredators.length,
       boidSpeed: boidGenes.speed,
-      predatorSpeed: predatorGenes.speed,
+      predatorSpeed: predatorAverages.speed,
       boidFertility: boidGenes.fertility,
-      predatorFertility: predatorGenes.fertility,
+      predatorFertility: predatorAverages.fertility,
       boidVision: boidGenes.vision,
+      predatorVision: predatorVision ? predatorAverages.vision : NaN,
       food: foodRatio() * 100,
       plants,
       winter,

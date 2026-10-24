@@ -86,6 +86,7 @@ export class ChartRenderer {
         deviation: true,
         series: [
           { label: 'Boids', values: samples.map(s => s.boidVision), color: boidColor, unit: '%' },
+          { label: 'Predators', values: samples.map(s => s.predatorVision), color: predatorColor, unit: '%' },
         ],
       },
     ];

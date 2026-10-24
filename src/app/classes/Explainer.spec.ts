@@ -1,4 +1,4 @@
-import { Explainer, isArea } from './Explainer';
+import { Explainer, ExplanationArea, isArea, isGroup, subject } from './Explainer';
 import { Simulation } from './Simulation';
 import type { Boid } from './Boid';
 
@@ -93,9 +93,16 @@ describe('Explainer', () => {
     expect(explainer.current?.text).toContain('Generation 20');
   });
 
-  it('should explain the arrival of winter, around the plankton', () => {
+  it('should explain the arrival of winter next to the season in the counters, or around the plankton without them', () => {
     sim.foodEnabled = true;
     sim.elapsedSteps = Math.round((0.76 - sim.yearStart) * sim.yearDuration * 60 * sim.stepsPerSecond);
+    explainer.setEnabled(true, 10000, sim, false, true);
+    expect(explainer.current?.id).toBe('winter');
+    expect(explainer.current?.anchor).toBe('season');
+
+    sim.food.food.fill(0);
+    sim.food.food[15 * sim.food.cols + 20] = 0.9;
+    explainer = new Explainer();
     explainer.setEnabled(true, 10000, sim);
     expect(explainer.current?.id).toBe('winter');
     expect(isArea(explainer.current!.anchor)).toBe(true);
@@ -110,14 +117,47 @@ describe('Explainer', () => {
     expect(explainer.current?.text).toContain('faster');
   });
 
-  it('should first explain how a flock works, around the flock, as soon as it is enabled', () => {
+  it('should first explain how a flock works, around the flock, and follow it as it swims', () => {
+    const flock = [];
     for (let i = 0; i < 6; i++) {
-      boid(300 + i * 5, 300);
+      flock.push(boid(300 + i * 5, 300));
     }
     explainer.setEnabled(true, 10000, sim);
     expect(explainer.current?.id).toBe('flocking');
     const anchor = explainer.current!.anchor;
-    expect(isArea(anchor) && Math.abs(anchor.center.x - 312.5) < 1).toBe(true);
+    expect(isGroup(anchor)).toBe(true);
+    expect((subject(anchor) as ExplanationArea).center.x).toBeCloseTo(312.5);
+    flock.forEach(member => member.position = { x: member.position.x + 200, y: 300 });
+    expect((subject(anchor) as ExplanationArea).center.x).toBeCloseTo(512.5);
+  });
+
+  it('should end the bubble soon when its boid is gone, and tell the capture of a chased boid right away', () => {
+    explainer.setEnabled(true, 10000);
+    const prey = boid();
+    explainer.notify({ type: 'birth', boid: prey }, 10000);
+    const hunter = boid(120, 100, true);
+    explainer.notify({ type: 'caught', boid: hunter, other: prey }, 11000);
+    expect(explainer.current?.id).toBe('caught');
+    expect(explainer.current?.anchor).toBe(hunter);
+
+    hunter.isDead = true;
+    hunter.alpha = 0;
+    explainer.update(sim, 12000, false);
+    expect(explainer.current).not.toBeNull();
+    explainer.update(sim, 11000 + 2 * explainer.lostSubject, false);
+    expect(explainer.current).toBeNull();
+  });
+
+  it('should explain an event that happened during another bubble, if its boid is still there', () => {
+    explainer.setEnabled(true, 10000);
+    explainer.notify({ type: 'birth', boid: boid() }, 10000);
+    const mutant = boid(200, 200);
+    explainer.notify({ type: 'mutant', boid: mutant, other: boid() }, 10500);
+    expect(explainer.current?.id).toBe('birth');
+    explainer.next(11000);
+    explainer.update(sim, 11000 + explainer.skipGap, false);
+    expect(explainer.current?.id).toBe('mutant');
+    expect(explainer.current?.anchor).toBe(mutant);
   });
 
   it('should point at the plankton itself, not at a boid, away from the borders', () => {

@@ -1,6 +1,6 @@
 // Simulation.ts
 import { Quadtree } from './Quadtree';
-import { Boid, Genome, Heritage, Point } from './Boid';
+import { Boid, Gene, Genome, Heritage, Point } from './Boid';
 import { SegmentField } from './SegmentField';
 import { FoodField } from './FoodField';
 import { PlantField } from './Plants';
@@ -61,9 +61,11 @@ export class Simulation {
   foodEnabled = true;                 // boids eat plankton: they need energy to reproduce, and starve without it - can be modified by the user
   fertileAreas = 1;                   // number of drifting areas where the plankton grows - can be modified by the user
   summerAreas = 1;                    // fertile areas added in summer, with the seasons
+  foodRegrowthRate = 0.0004;          // part of the missing plankton growing back per step: a grazed place is 63 % full again after 2500 steps
   plantsEnabled = true;               // algae grow in place, the boids nibble them - can be modified by the user
   plants = new PlantField();
-  plantSight = 150;                   // distance at which a hungry boid sees an alga
+  plantSight = 200;                   // distance at which a boid sees an alga
+  plantAttraction = 2;                // importance of a grown alga in sight, regarding the plankton around: the flocks graze the meadows
   foodUpdateInterval = 6;             // simulation steps between two growths of the plankton
   boidBaseMetabolism = 0.0001;        // energy spent per step, even at rest
   boidSwimCost = 0.0002;              // energy spent per step swimming at the default boid speed, it grows with the square of the speed
@@ -76,7 +78,7 @@ export class Simulation {
   // Seasons
   seasonsEnabled = true;              // the plankton thrives in summer and fades in winter - can be modified by the user
   yearDuration = 8;                   // in simulated minutes, a year starts with the spring - can be modified by the user
-  winterFood = 20;                    // plankton the fertile areas hold in the middle of winter, in percent of the summer - can be modified by the user
+  winterFood = 15;                 // plankton the fertile areas hold in the middle of winter, in percent of the summer - can be modified by the user
   readonly yearStart = 0.2;           // part of the year already gone when the simulation starts
 
   // Population limits
@@ -104,6 +106,9 @@ export class Simulation {
   ignoreDuration = 10;                // in seconds: a prey given up is not chased again for this long
   predatorReproductionModificator = 0;    // increase or decrease the reproduction rate for Predators
   predatorStarvationModificator = 0;      // increase or decrease the starvation resistance for Predators
+  predatorSight = 200;                // distance at which a predator sees the boids, times its vision gene, 0 for the whole screen without the gene - can be modified by the user
+  predatorEyesCost = 0.25;            // hunger per step and per unit of gene cost, times (vision² - 1): +50 % of vision makes a predator chasing at full speed a fifth hungrier
+  cruiseSpeed = 0.6;                  // part of its top speed at which a predator prowls, when it sees no prey
 
   // Super Predators
   superPredatorMaxVelocity = 3.2;
@@ -265,6 +270,7 @@ export class Simulation {
     if ( this.foodEnabled && ++this.stepsSinceFoodUpdate >= this.foodUpdateInterval ) {
       this.food.setPatchCount(this.fertileAreas + (this.seasonsEnabled && this.season.name === 'Summer' ? this.summerAreas : 0));
       this.food.productivity = this.productivity;
+      this.food.regrowthRate = this.foodRegrowthRate;
       this.food.update(this.stepsSinceFoodUpdate);
       if ( this.plantsEnabled ) {
         this.plants.update(this.stepsSinceFoodUpdate, this.productivity);
@@ -281,7 +287,8 @@ export class Simulation {
       { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
       () => this.foodEnabled ? this.food.fillRatio() : NaN,
       this.seasonsEnabled && this.season.name === 'Winter',
-      this.foodEnabled && this.plantsEnabled ? this.plants.plants.length : NaN
+      this.foodEnabled && this.plantsEnabled ? this.plants.plants.length : NaN,
+      this.predatorSight > 0
     );
 
     // Boids behavior rules
@@ -435,16 +442,18 @@ export class Simulation {
       seekFood.x = gradient.x * attraction;
       seekFood.y = gradient.y * attraction;
 
-      // The closest alga in sight is nibbled when the boid is on it, or sought, all the more when hungry
-      const plant = this.plantsEnabled ? this.plants.closest(boid.position, this.plantSight) : null;
+      // The closest alga in sight with something left to eat is nibbled when the boid is on it, or sought,
+      // all the more when hungry and when the alga is well grown
+      const plant = this.plantsEnabled ? this.plants.closest(boid.position, this.plantSight, alga => this.plants.edible(alga) > 0.05) : null;
       if ( plant !== null ) {
         const toPlant = { x: plant.x - boid.position.x, y: plant.y - boid.position.y };
         const distance = Math.sqrt(toPlant.x ** 2 + toPlant.y ** 2);
         if ( distance <= this.plants.radius(plant) ) {
           boid.energy += this.plants.eat(plant, Math.min(this.eatQuantity, 1 - boid.energy));
         } else {
-          seekFood.x += toPlant.x / distance * attraction;
-          seekFood.y += toPlant.y / distance * attraction;
+          const pull = attraction * this.plantAttraction * Math.min(1, this.plants.edible(plant));
+          seekFood.x += toPlant.x / distance * pull;
+          seekFood.y += toPlant.y / distance * pull;
         }
       }
     }
@@ -497,10 +506,11 @@ export class Simulation {
     let maxSteeringForce = this.predatorMaxSteeringForce;
 
     const speedBeforeSquared = (boid.velocity.x ** 2 + boid.velocity.y ** 2);
+    boid.aim = null;
 
     if ( boid.reproductionCooldown == 0 ) {
 
-      if (boid.predationCounter >= ( this.starvationThreshold * ( 11 + this.predatorStarvationModificator )/10 * boid.geneCost ) ) {
+      if (boid.predationCounter >= this.starvationLimit(boid) ) {
         this.kill(boid, 'predatorStarved');
       } else {
 
@@ -539,12 +549,18 @@ export class Simulation {
               closestBoid.preyLink = boid;
               boid.preyLink = closestBoid;
             }
-            // Update predator's velocity to move towards the closest boid
-            closestBoidPosition.x += closestBoid.velocity.x;
-            closestBoidPosition.y += closestBoid.velocity.y;
-            chase.x += (closestBoidPosition.x - boid.position.x) * boid.genome.maxVelocity;
-            chase.y += (closestBoidPosition.y - boid.position.y) * boid.genome.maxVelocity;
+            // Update predator's velocity to move towards the closest boid, one step ahead of it
+            // (aiming farther ahead doesn't help: the boids swerve)
+            boid.aim = { x: closestBoidPosition.x + closestBoid.velocity.x, y: closestBoidPosition.y + closestBoid.velocity.y };
+            boid.lastSeen = closestBoidPosition;
+            chase.x += (boid.aim.x - boid.position.x) * boid.genome.maxVelocity;
+            chase.y += (boid.aim.y - boid.position.y) * boid.genome.maxVelocity;
           }
+        }
+
+        // No prey in sight: it prowls, slower to save its strength
+        if ( boid.aim === null && this.predatorSight > 0 ) {
+          maxVelocity = Math.max(boid.genome.maxVelocity * this.cruiseSpeed, Math.min(maxVelocity, Math.sqrt(speedBeforeSquared) * 0.98));
         }
       }
 
@@ -568,9 +584,11 @@ export class Simulation {
     }
 
     if ( chase.x == 0 && chase.y == 0 && this.totalBoids != 0 ) {
-      // Update predator's velocity to move towards the last Boid Birth Position
-      chase.x += ((this.lastBoidBirthPosition.x - boid.position.x) + avoidBorders.x) * maxVelocity;
-      chase.y += ((this.lastBoidBirthPosition.y - boid.position.y) + avoidBorders.y) * maxVelocity;
+      // Update predator's velocity to move towards the last Boid Birth Position when it sees the whole screen,
+      // otherwise it prowls in search of a prey
+      const target = this.predatorSight === 0 ? this.lastBoidBirthPosition : this.prowl(boid);
+      chase.x += ((target.x - boid.position.x) + avoidBorders.x) * maxVelocity;
+      chase.y += ((target.y - boid.position.y) + avoidBorders.y) * maxVelocity;
     }
 
     // Steer away from the obstacles: the chase grows with the distance to the prey, so does the avoidance,
@@ -593,31 +611,49 @@ export class Simulation {
     boid.velocity.x += velocityChangeX;
     boid.velocity.y += velocityChangeY;
 
-    // Limit the velocity, and increase the starvation counter if the predator didn't eat
+    // Limit the velocity, and increase the starvation counter if the predator didn't eat: the faster it swims the hungrier,
+    // and good eyes make it hungrier too
     const speedSquared = boid.velocity.x ** 2 + boid.velocity.y ** 2;
     if (speedSquared > maxVelocity ** 2) {
       const ratio = maxVelocity / Math.sqrt(speedSquared);
       boid.velocity.x *= ratio;
       boid.velocity.y *= ratio;
       if ( boid.reproductionCooldown == 0 ) {
-        boid.predationCounter += boid.genome.maxVelocity;
+        boid.predationCounter += maxVelocity;
       }
     } else if ( boid.reproductionCooldown == 0 ) {
       boid.predationCounter += Math.sqrt(speedSquared);
     }
+    if ( boid.reproductionCooldown == 0 && this.predatorSight > 0 ) {
+      boid.predationCounter = Math.max(0, boid.predationCounter + this.predatorEyesCost * this.geneCostFactor * (boid.genome.vision ** 2 - 1));
+    }
   }
 
-  // The obstacles hide the boids behind them
+  // Where a predator without prey in sight goes: back where it saw the last one, then on its way with random turns,
+  // close ahead so that the borders turn it away
+  private prowl(predator: Boid): Point {
+    if ( predator.lastSeen !== null && this.calculateDistanceSquared(predator.position, predator.lastSeen) > 30 ** 2 ) {
+      return predator.lastSeen;
+    }
+    predator.lastSeen = null;
+    const heading = Math.atan2(predator.velocity.y, predator.velocity.x) + (Math.random() - 0.5) * 0.8;
+    return { x: predator.position.x + Math.cos(heading) * 5, y: predator.position.y + Math.sin(heading) * 5 };
+  }
+
+  // The prey is close enough for the predator to see it, and not hidden by an obstacle
   private canSee(hunter: Boid, prey: Boid): boolean {
-    return this.obstacles.isEmpty || !this.obstacles.blocks(hunter.position, prey.position);
+    return this.calculateDistanceSquared(hunter.position, prey.position) <= this.sightRadius(hunter) ** 2
+      && (this.obstacles.isEmpty || !this.obstacles.blocks(hunter.position, prey.position));
   }
 
-  // The closest prey not hidden by an obstacle: the closest ones are checked one by one, a few at most
+  // The closest prey in sight and not hidden by an obstacle: the closest ones are checked one by one, a few at most
   private findVisiblePrey(predator: Boid): Boid | null {
     const hidden = new Set<Boid>();
     const ignored = this.elapsedSteps < predator.ignoredUntil ? predator.ignoredPrey : null;
+    const sightSquared = this.sightRadius(predator) ** 2;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => boid !== ignored && !hidden.has(boid));
+      const prey = predator.quadtree.findClosestRegularBoid(predator, this.predatorsCooperativeness, boid => boid !== ignored && !hidden.has(boid)
+        && this.calculateDistanceSquared(predator.position, boid.position) <= sightSquared);
       if ( prey === null || this.canSee(predator, prey) ) {
         return prey;
       }
@@ -869,12 +905,21 @@ export class Simulation {
     }
   }
 
-  // How far a boid sees the predators, from the option and its vision
+  // How far a boid sees the predators, or a predator the boids, from the options and its vision
+  // Without a predator detection radius, and for the Super Predators, the whole screen
   sightRadius(boid: Boid): number {
+    if ( boid.isPredator ) {
+      return this.predatorSight > 0 && !boid.isSuper ? this.predatorSight * boid.genome.vision : Infinity;
+    }
     return this.fleeRadius * boid.genome.vision;
   }
 
-  // How long the energy of a boid lasts compared to the default: a big body holds more
+  // How long a predator can go without eating, in distance swum: fertility shortens it, a big body lengthens it
+  starvationLimit(predator: Boid): number {
+    return this.starvationThreshold * ( 11 + this.predatorStarvationModificator )/10 * predator.geneCost * this.endurance(predator);
+  }
+
+  // How long the energy of a boid, or a predator without eating, lasts compared to the default: a big body holds more
   endurance(boid: Boid): number {
     return boid.size ** this.sizeEndurance;
   }
@@ -958,21 +1003,20 @@ export class Simulation {
   }
 
   // Default genome of the species, slightly varied so that natural selection has something to work on from the start
-  // The predators don't have the vision gene, they see the whole screen
   createGenome ( isPredator: boolean ): Genome {
     const variation = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
     const vary = (value: number) => value * (1 + (Math.random() * 2 - 1) * variation);
     return {
       maxVelocity: vary(isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
       reproductionRate: vary(isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
-      vision: isPredator ? 1 : vary(1),
+      vision: vary(1),
       lineage: (Math.random() * 2 - 1) * this.founderLineage,
     };
   }
 
-  // The genes a species evolves
-  private genes ( isPredator: boolean ): ('maxVelocity' | 'reproductionRate' | 'vision')[] {
-    return isPredator ? ['maxVelocity', 'reproductionRate'] : ['maxVelocity', 'reproductionRate', 'vision'];
+  // The genes a species evolves: the predators only evolve their vision when they don't see the whole screen
+  private genes ( isPredator: boolean ): Gene[] {
+    return isPredator && this.predatorSight === 0 ? ['maxVelocity', 'reproductionRate'] : ['maxVelocity', 'reproductionRate', 'vision'];
   }
 
   // Alter one random gene by one evolution step, for better or worse, within the evolution cap
@@ -998,7 +1042,7 @@ export class Simulation {
   }
 
   // Set a gene, kept within the evolution cap around the species default
-  private setGene ( genome: Genome, gene: 'maxVelocity' | 'reproductionRate' | 'vision', isPredator: boolean, value: number ) {
+  private setGene ( genome: Genome, gene: Gene, isPredator: boolean, value: number ) {
     const evolutionCap = (isPredator ? this.predatorEvolutionCap : this.boidEvolutionCap) / 100;
     const defaultValue = gene === 'maxVelocity' ? (isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity)
       : gene === 'reproductionRate' ? (isPredator ? this.predatorReproductionRate : this.boidReproductionRate)
@@ -1071,6 +1115,8 @@ export class Simulation {
       staleSteps: 0,
       ignoredPrey: null,
       ignoredUntil: 0,
+      aim: null,
+      lastSeen: null,
       trail: []
     };
 

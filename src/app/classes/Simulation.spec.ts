@@ -103,6 +103,40 @@ describe('Simulation', () => {
     expect(breeds(30)).toBe(1);
   });
 
+  it('should let a predator see the boids as far as its sight only, and prowl slowly otherwise', () => {
+    const sim = emptySimulation();
+    sim.foodEnabled = false;
+    const predator = addBoid(sim, 100, 300, 2.5, 0, true);
+    predator.genome.vision = 1;
+    const far = addBoid(sim, 100 + sim.predatorSight + 60, 300);
+    steps(sim, 10);
+    expect(predator.preyLink).toBeNull();
+    expect(Math.hypot(predator.velocity.x, predator.velocity.y)).toBeLessThan(predator.genome.maxVelocity * 0.9);
+    // Without a detection radius, the whole screen
+    sim.predatorSight = 0;
+    sim.step();
+    expect(predator.preyLink).toBe(far);
+  });
+
+  it('should make good eyes cost a predator some hunger, and let a big one last longer', () => {
+    const hunger = (vision: number) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      const predator = addBoid(sim, 300, 300, 0, 0, true);
+      predator.genome.vision = vision;
+      steps(sim, 60);
+      return predator.predationCounter;
+    };
+    expect(hunger(1.5)).toBeGreaterThan(hunger(1));
+    const sim = emptySimulation();
+    const big = addBoid(sim, 300, 300, 0, 0, true);
+    const small = addBoid(sim, 400, 300, 0, 0, true);
+    big.size = 1.3;
+    small.size = 0.8;
+    big.geneCost = small.geneCost = 1;
+    expect(sim.starvationLimit(big)).toBeGreaterThan(sim.starvationLimit(small));
+  });
+
   it('should add a fertile area in summer', () => {
     const sim = emptySimulation();
     const at = (yearProgress: number) => {

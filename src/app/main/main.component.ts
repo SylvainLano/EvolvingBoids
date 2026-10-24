@@ -4,7 +4,7 @@ import { BoidComponent } from '../boid/boid.component';
 import { OptionsComponent } from '../options/options.component';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Point } from '../classes/Boid';
-import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
+import { BoidShape, CanvasRenderer, Explained, MutantHalo } from '../classes/CanvasRenderer';
 import { SegmentField } from '../classes/SegmentField';
 import { boidColor } from '../classes/BoidColor';
 import { DemoMode } from '../classes/DemoMode';
@@ -12,7 +12,7 @@ import { ChartRenderer } from '../classes/ChartRenderer';
 import { Simulation } from '../classes/Simulation';
 import { Challenge, ChallengeRunner, clock } from '../classes/Challenges';
 import { Tool } from '../classes/Tool';
-import { Explainer, ExplanationArea, isArea } from '../classes/Explainer';
+import { Explainer, subject } from '../classes/Explainer';
 import { SharedLink, UserSettings, linkKeys, linkQuery, parseLink, placeLines, shareLines } from '../classes/Settings';
 
 export type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
@@ -24,9 +24,9 @@ interface Inspection {
   title: string;
   color: string;
   speed: string;
-  endurance: string | null;   // regular boids, with plankton: a slow boid is bigger, its energy lasts longer
+  endurance: string | null;   // a slow boid is bigger, its energy lasts longer (with plankton), a slow predator lasts longer without eating
   fertility: string;
-  vision: string | null;      // regular boids, how far they see the predators
+  vision: string | null;      // how far a boid sees the predators, or a predator the boids
   lifeLabel: string;
   life: string;
   energy: string | null;      // regular boids, with plankton
@@ -48,15 +48,17 @@ export class MainComponent implements OnInit, OnDestroy {
   explainer = new Explainer();
   explanationPosition: Point | null = null;     // where the bubble of the explanation is drawn
   explanationProgress = 0;                      // part of the reading time elapsed, from 0 to 1
-  explained: Boid | ExplanationArea | null = null;
+  explained: Explained | null = null;           // what the bubble circles on the screen, and the bubble to link it to
   private explanationStart = -1;
-  private explanationPoint: Point | null = null;  // where the subject of the bubble was when it appeared, null for the charts
+  private explanationPoint: Point | null = null;  // where the subject of the bubble was when it was placed, null for the charts and the season
   private explanationMargin = 30;
+  private readonly explanationDrift = 350;      // in px: a bubble moves closer to its subject when it swims farther away than this
   explainGlows = !MainComponent.explainSeen();  // on the first visit, the Explain button glows to catch the eye
   private static readonly explainSeenKey = 'evolvingboids.explainSeen';
 
   // Display
   renderer: 'canvas' | 'dom' = 'canvas';        // the DOM renderer is kept to compare performances
+  boidShape: BoidShape = 'arrow';               // how the Canvas renderer draws the boids
   darkMode = true;                              // the boids glow beautifully on a dark sea
   glow = true;                                  // additive blending and halos with the canvas renderer, in dark mode
   drawQuadtree = false;
@@ -145,6 +147,7 @@ export class MainComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.canvasRenderer = new CanvasRenderer(this.boidCanvas.nativeElement);
     this.chartRenderer = new ChartRenderer(this.chartCanvas.nativeElement);
+    this.explainer.covered = (point) => this.isCovered(point);
 
     // The settings of the last visit, or those of a shared link
     this.settings.load();
@@ -287,7 +290,7 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   toggleExplain() {
-    this.explainer.setEnabled(!this.explainer.enabled, performance.now(), this.sim, this.displayCharts);
+    this.explainer.setEnabled(!this.explainer.enabled, performance.now(), this.sim, this.displayCharts, this.seasonVisible);
     if ( this.explainGlows ) {
       this.explainGlows = false;
       try {
@@ -528,9 +531,8 @@ export class MainComponent implements OnInit, OnDestroy {
       lifeLabel = 'Lifetime';
       life = `${seconds(boid.age)} s / ${sim.superPredatorLifetime} s`;
     } else if ( boid.isPredator ) {
-      const starvation = sim.starvationThreshold * ( 11 + sim.predatorStarvationModificator )/10 * boid.geneCost;
       lifeLabel = 'Hunger';
-      life = boid.reproductionCooldown > 0 ? 'digesting' : `${Math.round(100 * boid.predationCounter / starvation)} %`;
+      life = boid.reproductionCooldown > 0 ? 'digesting' : `${Math.round(100 * boid.predationCounter / sim.starvationLimit(boid))} %`;
     } else {
       lifeLabel = 'Age';
       life = sim.boidLifespan > 0
@@ -550,21 +552,48 @@ export class MainComponent implements OnInit, OnDestroy {
         : `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
       color: boidColor(boid.isPredator, false, boid.genome.lineage, 1, this.darkMode, 1, boid.isSuper),
       speed: percent(boid.genome.maxVelocity / (boid.isPredator ? sim.predatorMaxVelocity : sim.boidMaxVelocity) - 1),
-      endurance: regular && sim.foodEnabled ? percent(sim.endurance(boid) - 1) : null,
+      endurance: boid.isSuper || (regular && !sim.foodEnabled) ? null : percent(sim.endurance(boid) - 1),
       fertility: boid.isSuper
         ? '-'
         : percent(1 - boid.genome.reproductionRate / (boid.isPredator ? sim.predatorReproductionRate : sim.boidReproductionRate)),
-      vision: regular ? `${percent(boid.genome.vision - 1)} (${Math.round(sim.sightRadius(boid))} px)` : null,
+      vision: boid.isSuper ? null
+        : Number.isFinite(sim.sightRadius(boid)) ? `${percent(boid.genome.vision - 1)} (${Math.round(sim.sightRadius(boid))} px)`
+        : 'the whole screen',
       lifeLabel,
       life,
       energy: sim.foodEnabled && regular ? `${Math.round(boid.energy * 100)} %` : null,
     };
   }
 
-  // The bubble of the explanation follows its boid, above and to the right of it, inside the window; or stands above the charts
+  // The season is explained next to its line in the counters, when they are displayed
+  private get seasonVisible(): boolean {
+    return this.displayBoidCount && this.sim.seasonsEnabled;
+  }
+
+  // A place of the screen under the charts, the panel or the tool bar, or close to them: the bubbles don't explain what is there
+  private isCovered(point: Point): boolean {
+    const margin = 20;
+    const elements: (HTMLElement | null)[] = [
+      this.displayCharts ? this.chartCanvas.nativeElement : null,
+      this.el.nativeElement.querySelector('app-options .panel'),
+      this.el.nativeElement.querySelector('.tool-bar'),
+    ];
+    return elements.some(element => {
+      const rect = element?.getBoundingClientRect();
+      return rect !== undefined && rect.width > 0
+        && point.x > rect.left - margin && point.x < rect.right + margin && point.y > rect.top - margin && point.y < rect.bottom + margin;
+    });
+  }
+
+  // The line of the season glows while a bubble explains it
+  get explainingSeason(): boolean {
+    return !this.demo.active && this.explainer.current?.anchor === 'season';
+  }
+
+  // The bubble of the explanation stands next to its subject, inside the window; or above the charts, or next to the counters
   private updateExplanation(now: number) {
     if ( !this.demo.active ) {
-      this.explainer.update(this.sim, now, this.displayCharts);
+      this.explainer.update(this.sim, now, this.displayCharts, this.seasonVisible);
     }
     const current = this.demo.active ? null : this.explainer.current;
     if ( current === null ) {
@@ -574,15 +603,19 @@ export class MainComponent implements OnInit, OnDestroy {
       return;
     }
     this.explanationProgress = Math.min(1, (now - current.start) / current.duration);
-    this.explained = current.anchor === 'charts' ? null : current.anchor;
+    const circled = subject(current.anchor);
+    this.explained = circled === null ? null : { subject: circled, bubble: null };
 
-    // The bubble is placed from where its subject was when it appeared, then stands still for an easy reading,
-    // even if its boid swims away. It is only kept inside the window, with its size measured once displayed
-    if ( current.start !== this.explanationStart ) {
+    // The bubble is placed from where its subject was when it appeared, then stands still for an easy reading.
+    // A thin line links it to its subject, and it moves closer when its subject swims far away.
+    // It is only kept inside the window, with its size measured once displayed
+    const place = circled === null ? null : 'center' in circled ? circled.center : circled.position;
+    const far = place !== null && this.explanationPoint !== null
+      && (place.x - this.explanationPoint.x) ** 2 + (place.y - this.explanationPoint.y) ** 2 > this.explanationDrift ** 2;
+    if ( current.start !== this.explanationStart || far ) {
       this.explanationStart = current.start;
-      this.explanationPoint = current.anchor === 'charts' ? null
-        : { ...(isArea(current.anchor) ? current.anchor.center : current.anchor.position) };
-      this.explanationMargin = current.anchor !== 'charts' && isArea(current.anchor) ? current.anchor.radius : 30;
+      this.explanationPoint = place === null ? null : { ...place };
+      this.explanationMargin = circled !== null && 'center' in circled ? circled.radius : 30;
     }
     const bubble: HTMLElement | null = this.el.nativeElement.querySelector('.explain-bubble');
     const width = bubble?.offsetWidth || 400;
@@ -590,7 +623,13 @@ export class MainComponent implements OnInit, OnDestroy {
     const { width: screenWidth, height: screenHeight } = this.sim;
     let x: number;
     let y: number;
-    if ( this.explanationPoint === null ) {
+    if ( current.anchor === 'season' ) {
+      // On the right of the counters, at the height of the season
+      const panel: HTMLElement | null = this.el.nativeElement.querySelector('app-options .panel');
+      const season: HTMLElement | null = this.el.nativeElement.querySelector('.counter-season');
+      x = (panel?.getBoundingClientRect().right ?? 300) + 16;
+      y = (season?.getBoundingClientRect().top ?? 100) - 12;
+    } else if ( this.explanationPoint === null ) {
       // Above the charts
       x = screenWidth - 20 - width;
       y = screenHeight - 20 - this.chartCanvas.nativeElement.offsetHeight - 10 - height;
@@ -606,6 +645,9 @@ export class MainComponent implements OnInit, OnDestroy {
       x: Math.min(screenWidth - width - 10, Math.max(10, x)),
       y: Math.min(screenHeight - height - 10, Math.max(60, y)),
     };
+    if ( this.explained !== null ) {
+      this.explained.bubble = { ...this.explanationPosition, width, height };
+    }
   }
 
   // The user read the bubble: the next one comes right away
@@ -685,17 +727,17 @@ export class MainComponent implements OnInit, OnDestroy {
     this.canvasRenderer.render(
       this.renderer === 'canvas' ? [sim.boids, sim.predators] : [],
       this.drawQuadtree ? this.finalQuadtreeList : null,
-      { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount },
+      { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount, shape: this.boidShape },
       this.mutantHalos,
       this.inspectedBoid === null ? null
-        : { boid: this.inspectedBoid, sight: this.inspectedBoid.isPredator ? null : sim.sightRadius(this.inspectedBoid) },
+        : { boid: this.inspectedBoid, sight: Number.isFinite(sim.sightRadius(this.inspectedBoid)) ? sim.sightRadius(this.inspectedBoid) : null },
       this.explained,
       {
         food: sim.foodEnabled
           ? { texture: sim.food.texture(this.darkMode), width: sim.food.cols * sim.food.cellSize, height: sim.food.rows * sim.food.cellSize }
           : null,
         plants: sim.foodEnabled && sim.plantsEnabled
-          ? { plants: sim.plants.plants, reach: (plant) => sim.plants.reach(plant), color: this.plantColor }
+          ? { plants: sim.plants.plants, reach: (plant) => sim.plants.reach(plant), scale: (plant) => sim.plants.scale(plant), color: this.plantColor }
           : null,
         obstacles: sim.obstacles.polylines,
         currents: sim.currents.polylines,

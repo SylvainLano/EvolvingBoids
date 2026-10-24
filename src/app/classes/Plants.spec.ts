@@ -17,24 +17,33 @@ describe('PlantField', () => {
     expect(fresh.plants.length).toBeLessThanOrEqual(fresh.startingPlants);
   });
 
-  it('should grow like a small tree, up toward the light, with branches now and then', () => {
+  it('should grow like a small tree: a trunk up toward the light, branches spreading wide, some drooping', () => {
     const trees = [];
-    for (let i = 0; i < 10; i++) {
-      trees.push(field.add({ x: 100 + i * 60, y: 300 })!);
+    for (let i = 0; i < 100; i++) {
+      field.plants = [];
+      trees.push(field.add({ x: 400, y: 300 })!);
     }
-    for (const tree of trees) {
-      expect(tree.twig.filter(segment => segment.depth === 0).length).toBeGreaterThanOrEqual(6);
-      expect(tree.twig.every(segment => segment.y2 < segment.y1)).toBe(true);
-    }
-    expect(trees.some(tree => tree.twig.some(segment => segment.depth > 0))).toBe(true);
+    const segments = trees.flatMap(tree => tree.twig);
+    const trunk = segments.filter(segment => segment.depth === 0);
+    const branches = segments.filter(segment => segment.depth > 0);
+    expect(trunk.every(segment => segment.y2 < segment.y1)).toBe(true);
+    expect(trees.every(tree => tree.twig.filter(segment => segment.depth === 0).length >= 5)).toBe(true);
+    expect(trees.filter(tree => tree.twig.some(segment => segment.depth > 0)).length).toBeGreaterThan(80);
+    expect(branches.some(segment => segment.y2 > segment.y1)).toBe(true);
+    // No branch hangs straight down
+    expect(segments.every(segment => Math.abs(segment.x2 - segment.x1) > 0.1 || segment.y2 < segment.y1)).toBe(true);
   });
 
-  it('should get taller as the alga grows', () => {
+  it('should show its branches as the alga grows, then keep getting bigger', () => {
     const plant = field.add({ x: 400, y: 300 })!;
-    const young = field.reach(plant);
-    plant.biomass = field.maxBiomass;
-    expect(field.reach(plant)).toBeGreaterThan(young);
+    const young = { reach: field.reach(plant), scale: field.scale(plant) };
+    plant.biomass = field.maxBiomass / 2;
+    expect(field.reach(plant)).toBeGreaterThan(young.reach);
     expect(field.reach(plant)).toBeCloseTo(plant.length);
+    const half = field.scale(plant);
+    plant.biomass = field.maxBiomass;
+    expect(half).toBeGreaterThan(young.scale);
+    expect(field.scale(plant)).toBeGreaterThan(half);
   });
 
   it('should grow in summer, and wither in winter until it is gone', () => {
@@ -66,10 +75,13 @@ describe('PlantField', () => {
     expect(field.plants.length).toBeGreaterThan(0);
   });
 
-  it('should be nibbled, erased, and kept away from the borders', () => {
+  it('should be nibbled down to its roots, erased, and kept away from the borders', () => {
     const plant = field.add({ x: 400, y: 300 })!;
-    expect(field.eat(plant, 10)).toBe(field.sproutBiomass);
-    expect(plant.biomass).toBe(0);
+    expect(field.eat(plant, 10)).toBeCloseTo(field.sproutBiomass - field.rootBiomass);
+    expect(plant.biomass).toBeCloseTo(field.rootBiomass);
+    expect(field.eat(plant, 10)).toBe(0);
+    field.update(600, 1);
+    expect(field.plants).toContain(plant);
     expect(field.add({ x: 10, y: 300 })).toBeNull();
     field.add({ x: 200, y: 200 });
     field.erase({ x: 200, y: 200 }, 20);

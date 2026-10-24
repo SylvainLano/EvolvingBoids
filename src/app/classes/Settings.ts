@@ -17,6 +17,7 @@ export interface Setting {
 export const SETTINGS: readonly Setting[] = [
   // Display
   { key: 'renderer', owner: 'view', choices: ['canvas', 'dom'] },
+  { key: 'boidShape', owner: 'view', choices: ['arrow', 'fish', 'bird', 'letters'] },
   { key: 'darkMode', owner: 'view' },
   { key: 'glow', owner: 'view' },
   { key: 'drawQuadtree', owner: 'view' },
@@ -56,6 +57,7 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'predatorEvolutionCap', owner: 'sim', range: [5, 95] },
   { key: 'predatorsSeparationRadius', owner: 'sim', range: [10, 200] },
   { key: 'predatorStarvationModificator', owner: 'sim', range: [-10, 10] },
+  { key: 'predatorSight', owner: 'sim', range: [0, 1000] },
 ];
 
 // A value read from a link or from the browser, null when it isn't valid for this setting: a number out of

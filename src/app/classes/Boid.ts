@@ -10,9 +10,11 @@ export interface Point {
 export interface Genome {
   maxVelocity: number;        // top speed: a fast boid is smaller, and tires sooner
   reproductionRate: number;   // delay before being able to reproduce again (lower is more fertile)
-  vision: number;             // regular boids: factor of the distance at which they see a predator, good eyes cost energy
+  vision: number;             // factor of the distance at which a boid sees the predators, or a predator the boids: good eyes cost energy or hunger
   lineage: number;            // the mark of a family, in [-1, 1], that gives the color: it only changes with a mutation
 }
+
+export type Gene = 'maxVelocity' | 'reproductionRate' | 'vision';
 
 // What a reinforcement inherits from an existing or recently dead individual
 export interface Heritage {
@@ -45,5 +47,7 @@ export interface Boid {
   staleSteps: number;       // predators: simulation steps since the chase last made some progress
   ignoredPrey: Boid | null; // predators: a prey given up, not chased again for a while
   ignoredUntil: number;     // predators: the elapsed step until which the given up prey is ignored
+  aim: Point | null;        // predators: where a chasing predator heads, null when it sees no prey
+  lastSeen: Point | null;   // predators: where the last prey in sight was, a prowling predator goes back there
   trail: Point[];           // last positions, oldest first, drawn as a trail by the canvas renderer
 }
