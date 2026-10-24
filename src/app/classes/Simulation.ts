@@ -7,6 +7,8 @@ import { Statistics } from './Statistics';
 
 export type SimulationMode = 'DeathMatch' | 'Retry' | 'Continued' | 'Infinite';
 export type LowFPSAction = 'PopulationControl' | 'BudgetCuts' | 'Nothing';
+export type SeasonName = 'Spring' | 'Summer' | 'Autumn' | 'Winter';
+const SEASONS: SeasonName[] = ['Spring', 'Summer', 'Autumn', 'Winter'];
 
 // What happens in the simulation, for the display: a death has its cause, a capture its hunter (boid) and prey (other)
 export type DeathCause = 'oldAge' | 'starved' | 'predatorStarved' | 'superPredatorGone' | 'erased';
@@ -46,8 +48,13 @@ export class Simulation {
   birthVariation = 2;                 // random variation of every gene at each birth, in percent
   geneCostFactor = 1.5;               // each +10 % of speed or fertility costs 15 % of lifespan (boids) or starvation resistance (predators) - can be modified by the user
   minGeneCost = 0.2;                  // the gene cost never shortens a life below 20 %
-  traitScale = 0.5;                   // gene deviation from the species default that gives the most extreme color
+  traitScale = 0.5;                   // gene deviation from the species default that gives the most extreme trait
   genePoolSize = 30;                  // number of dead individuals whose genes are remembered, per species
+  lineageStep = 0.25;                 // shift of the family color at each mutation, within [-1, 1]
+  founderLineage = 0.1;               // the first individuals have nearly the same color: the families appear with the mutations
+  sizeEffect = 1.5;                   // a boid 10 % faster than the default is 15 % smaller, a slower one bigger
+  sizeEndurance = 0.5;                // the energy of a boid lasts as long as the square root of its size
+  boidEyesCost = 0.00005;             // energy per step and per unit of gene cost, times (vision² - 1): good eyes cost energy
 
   // Plankton
   foodEnabled = true;                 // boids eat plankton: they need energy to reproduce, and starve without it - can be modified by the user
@@ -60,6 +67,12 @@ export class Simulation {
   birthEnergyCost = 0.3;              // energy spent by each parent at a birth, the child starts with both
   foodAttraction = 1.5;               // importance of looking for food when hungry, regarding other directional factors
   grazingAttraction = 0.4;            // part of the food attraction kept when not hungry: the flocks stay on their pastures and follow them
+
+  // Seasons
+  seasonsEnabled = true;              // the plankton thrives in summer and fades in winter - can be modified by the user
+  yearDuration = 8;                   // in simulated minutes, a year starts with the spring - can be modified by the user
+  winterFood = 20;                    // plankton the fertile areas hold in the middle of winter, in percent of the summer - can be modified by the user
+  readonly yearStart = 0.2;           // part of the year already gone when the simulation starts
 
   // Population limits
   infiniteMinBoids = 30;              // in Infinite mode, reinforcements arrive when there are fewer boids than this, enough for them to find partners
@@ -209,6 +222,27 @@ export class Simulation {
     this.food.resize(width, height);
   }
 
+  // Where the year is: the integer part counts the years, the decimals go from the spring to the winter
+  // The simulation starts at the end of spring, when the plankton is nearly at its best
+  private get years(): number {
+    return this.yearStart + this.elapsedSteps / this.stepsPerSecond / 60 / this.yearDuration;
+  }
+
+  // The growth of the plankton, from 1 in the middle of summer down to the winter food in the middle of winter
+  get productivity(): number {
+    if ( !this.seasonsEnabled ) {
+      return 1;
+    }
+    const winter = this.winterFood / 100;
+    const progress = this.years - Math.floor(this.years);
+    return (1 + winter) / 2 + (1 - winter) / 2 * Math.cos(2 * Math.PI * (progress - 0.375));
+  }
+
+  get season(): { name: SeasonName, year: number, progress: number } {
+    const progress = this.years - Math.floor(this.years);
+    return { name: SEASONS[Math.min(3, Math.floor(progress * 4))], year: Math.floor(this.years) + 1, progress };
+  }
+
   step() {
     if ( this.pauseSimulation ) {
       return;
@@ -219,9 +253,10 @@ export class Simulation {
     // Super Predators are a tool of the user, they don't count as predators
     this.totalPredators = this.predators.filter(predator => !predator.isSuper).length;
 
-    // The plankton grows every few steps, it is enough for its slow pace
+    // The plankton grows every few steps, it is enough for its slow pace, and less in winter
     if ( this.foodEnabled && ++this.stepsSinceFoodUpdate >= this.foodUpdateInterval ) {
       this.food.setPatchCount(this.fertileAreas);
+      this.food.productivity = this.productivity;
       this.food.update(this.stepsSinceFoodUpdate);
       this.stepsSinceFoodUpdate = 0;
     }
@@ -233,7 +268,8 @@ export class Simulation {
       this.predators,
       { maxVelocity: this.boidMaxVelocity, reproductionRate: this.boidReproductionRate },
       { maxVelocity: this.predatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
-      () => this.foodEnabled ? this.food.fillRatio() : NaN
+      () => this.foodEnabled ? this.food.fillRatio() : NaN,
+      this.seasonsEnabled && this.season.name === 'Winter'
     );
 
     // Boids behavior rules
@@ -327,9 +363,11 @@ export class Simulation {
     );
 
     const nearbyBoids = boid.quadtree.rangeQuery( boid, boidsLargestRadius, this.rangeQueryCap );
+    // The vision of a boid sets how far it sees the predators
+    const sight = this.sightRadius(boid);
     let nearbyPredators: Boid[] = [];
     if ( this.fleeFactor != 0 ) {
-      nearbyPredators = boid.quadtree.rangeQuery( boid, this.fleeRadius, this.rangeQueryCap, true );
+      nearbyPredators = boid.quadtree.rangeQuery( boid, sight, this.rangeQueryCap, true );
     }
 
     // Alignment, cohesion and separation with nearby boids
@@ -347,7 +385,7 @@ export class Simulation {
     }
 
     // Flee predators: Move away from nearby predators
-    const fleePredators = this.fleePredators(boid, nearbyPredators);
+    const fleePredators = this.fleePredators(boid, nearbyPredators, sight);
 
     // Check if the flee force is below a certain threshold
     const fleeForceMagnitudeSquared = fleePredators.x ** 2 + fleePredators.y ** 2;
@@ -396,10 +434,13 @@ export class Simulation {
       boid.velocity.y *= ratio;
     }
 
-    // Living and swimming cost energy, swimming fast costs much more: a boid without energy starves to death
+    // Living, swimming and seeing cost energy: swimming fast costs much more, and good eyes cost too,
+    // while a big body lasts longer. A boid without energy starves to death
     if ( this.foodEnabled ) {
       const relativeSpeedSquared = Math.min(speedSquared, boid.genome.maxVelocity ** 2) / this.boidMaxVelocity ** 2;
-      boid.energy -= this.boidBaseMetabolism + this.boidSwimCost * relativeSpeedSquared;
+      const eyes = this.boidEyesCost * this.geneCostFactor * (boid.genome.vision ** 2 - 1);
+      const spent = Math.max(0, this.boidBaseMetabolism + this.boidSwimCost * relativeSpeedSquared + eyes);
+      boid.energy -= spent / this.endurance(boid);
       if ( boid.energy <= 0 ) {
         boid.energy = 0;
         this.kill(boid, 'starved');
@@ -788,9 +829,19 @@ export class Simulation {
     }
   }
 
-  private fleePredators(currentBoid: Boid, predators: Boid[]): Point {
+  // How far a boid sees the predators, from the option and its vision
+  sightRadius(boid: Boid): number {
+    return this.fleeRadius * boid.genome.vision;
+  }
+
+  // How long the energy of a boid lasts compared to the default: a big body holds more
+  endurance(boid: Boid): number {
+    return boid.size ** this.sizeEndurance;
+  }
+
+  private fleePredators(currentBoid: Boid, predators: Boid[], sight: number): Point {
     const fleePredatorsForce = { x: 0, y: 0 };
-    const fleeRadiusSquared = this.fleeRadius**2;
+    const fleeRadiusSquared = sight ** 2;
     // The mouse acts as a predator
     const threats = this.mousePosition !== null ? [...predators.map(predator => predator.position), this.mousePosition] : predators.map(predator => predator.position);
 
@@ -811,6 +862,8 @@ export class Simulation {
     const genome: Genome = {
       maxVelocity: (Math.random() < 0.5 ? parent : partner).genome.maxVelocity,
       reproductionRate: (Math.random() < 0.5 ? parent : partner).genome.reproductionRate,
+      vision: (Math.random() < 0.5 ? parent : partner).genome.vision,
+      lineage: (Math.random() < 0.5 ? parent : partner).genome.lineage,
     };
 
     this.varyAtBirth(genome, parent.isPredator);
@@ -865,46 +918,68 @@ export class Simulation {
   }
 
   // Default genome of the species, slightly varied so that natural selection has something to work on from the start
+  // The predators don't have the vision gene, they see the whole screen
   createGenome ( isPredator: boolean ): Genome {
     const variation = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
     const vary = (value: number) => value * (1 + (Math.random() * 2 - 1) * variation);
     return {
       maxVelocity: vary(isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
       reproductionRate: vary(isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
+      vision: isPredator ? 1 : vary(1),
+      lineage: (Math.random() * 2 - 1) * this.founderLineage,
     };
   }
 
+  // The genes a species evolves
+  private genes ( isPredator: boolean ): ('maxVelocity' | 'reproductionRate' | 'vision')[] {
+    return isPredator ? ['maxVelocity', 'reproductionRate'] : ['maxVelocity', 'reproductionRate', 'vision'];
+  }
+
   // Alter one random gene by one evolution step, for better or worse, within the evolution cap
+  // The family color shifts too: the mutant starts a new lineage
   mutate ( genome: Genome, isPredator: boolean ) {
     const evolutionStep = (isPredator ? this.predatorEvolutionStep : this.boidEvolutionStep) / 100;
-    const gene: keyof Genome = Math.random() < 0.5 ? 'maxVelocity' : 'reproductionRate';
+    const genes = this.genes(isPredator);
+    const gene = genes[Math.floor(Math.random() * genes.length)];
     this.setGene(genome, gene, isPredator, genome[gene] * (Math.random() < 0.5 ? 1 + evolutionStep : 1 - evolutionStep));
+
+    // Bounced back at both ends of the range of colors
+    const lineage = genome.lineage + (Math.random() < 0.5 ? this.lineageStep : -this.lineageStep);
+    genome.lineage = lineage > 1 ? 2 - lineage : lineage < -1 ? -2 - lineage : lineage;
   }
 
   // Small random variation of every gene at each birth, so natural selection always has some diversity to work on
+  // The family color doesn't vary: only a mutant gets a new one
   private varyAtBirth ( genome: Genome, isPredator: boolean ) {
     const variation = this.birthVariation / 100;
-    for (const gene of ['maxVelocity', 'reproductionRate'] as const) {
+    for (const gene of this.genes(isPredator)) {
       this.setGene(genome, gene, isPredator, genome[gene] * (1 + (Math.random() * 2 - 1) * variation));
     }
   }
 
   // Set a gene, kept within the evolution cap around the species default
-  private setGene ( genome: Genome, gene: keyof Genome, isPredator: boolean, value: number ) {
+  private setGene ( genome: Genome, gene: 'maxVelocity' | 'reproductionRate' | 'vision', isPredator: boolean, value: number ) {
     const evolutionCap = (isPredator ? this.predatorEvolutionCap : this.boidEvolutionCap) / 100;
-    const defaultValue = gene === 'maxVelocity'
-      ? (isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity)
-      : (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
+    const defaultValue = gene === 'maxVelocity' ? (isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity)
+      : gene === 'reproductionRate' ? (isPredator ? this.predatorReproductionRate : this.boidReproductionRate)
+      : 1;
     genome[gene] = Math.min(defaultValue * (1 + evolutionCap), Math.max(defaultValue * (1 - evolutionCap), value));
   }
 
   // Trade-off of the genes: faster or more fertile boids live shorter, more fertile predators starve faster
   // (fast predators already get hungry faster). With a cost above 1, the best genes depend on the predation:
   // boids that are eaten young gain from living fast, boids that die of old age gain from living long
+  // Good eyes cost energy, without plankton they cost some life instead
   calculateGeneCost ( genome: Genome, isPredator: boolean ): number {
     const speed = isPredator ? 0 : genome.maxVelocity / this.boidMaxVelocity - 1;
     const fertility = 1 - genome.reproductionRate / (isPredator ? this.predatorReproductionRate : this.boidReproductionRate);
-    return Math.max(this.minGeneCost, 1 - this.geneCostFactor * (speed + fertility));
+    const vision = isPredator || this.foodEnabled ? 0 : genome.vision - 1;
+    return Math.max(this.minGeneCost, 1 - this.geneCostFactor * (speed + fertility + vision));
+  }
+
+  // The body size: a slow boid is bigger, a fast one smaller, within reasonable limits
+  private bodySize ( speedTrait: number ): number {
+    return Math.min(1.5, Math.max(0.6, 1 - this.sizeEffect * speedTrait * this.traitScale));
   }
 
   // Normalized deviation of a gene from its species default, in [-1, 1], used to color the boid
@@ -930,13 +1005,13 @@ export class Simulation {
   // A boid of the initial population is always created, whatever the FPS at that moment
   private createBoid ( position: Point, velocity: Point, isPredator: boolean, genome: Genome,
     reproductionCooldown: number, generation: number = 0, isMutant: boolean = false ): Boid {
+    const speedTrait = this.geneTrait(genome.maxVelocity, isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity);
     const boid: Boid = {
       position: position,
       velocity: velocity,
       genome: genome,
-      speedTrait: this.geneTrait(genome.maxVelocity, isPredator ? this.predatorMaxVelocity : this.boidMaxVelocity),
-      // a lower reproduction rate means a more fertile boid
-      fertilityTrait: -this.geneTrait(genome.reproductionRate, isPredator ? this.predatorReproductionRate : this.boidReproductionRate),
+      speedTrait: speedTrait,
+      size: this.bodySize(speedTrait),
       isPredator: isPredator,
       isSuper: false,
       generation: generation,
@@ -976,11 +1051,13 @@ export class Simulation {
       position,
       { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 },
       true,
-      { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate },
+      { maxVelocity: this.superPredatorMaxVelocity, reproductionRate: this.predatorReproductionRate, vision: 1, lineage: 0 },
       0
     );
     if ( superPredator !== null ) {
+      // Its size doesn't come from its speed: it is drawn bigger than any predator
       superPredator.isSuper = true;
+      superPredator.size = 1;
       this.onEvent({ type: 'superPredator', boid: superPredator });
     }
     return superPredator;

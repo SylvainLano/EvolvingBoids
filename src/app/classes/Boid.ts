@@ -6,10 +6,12 @@ export interface Point {
   y: number;
 }
 
-// Heritable traits: blended from both parents at birth, then possibly altered by a mutation
+// Heritable traits: each one comes from one of the parents at birth, then a mutation may alter one of them
 export interface Genome {
-  maxVelocity: number;        // top speed
+  maxVelocity: number;        // top speed: a fast boid is smaller, and tires sooner
   reproductionRate: number;   // delay before being able to reproduce again (lower is more fertile)
+  vision: number;             // regular boids: factor of the distance at which they see a predator, good eyes cost energy
+  lineage: number;            // the mark of a family, in [-1, 1], that gives the color: it only changes with a mutation
 }
 
 // What a reinforcement inherits from an existing or recently dead individual
@@ -22,8 +24,8 @@ export interface Boid {
   position: Point;
   velocity: Point;
   genome: Genome;
-  speedTrait: number;       // deviation of maxVelocity from the species default, normalized in [-1, 1] - drives the color
-  fertilityTrait: number;   // deviation of fertility from the species default, normalized in [-1, 1] - drives the color
+  speedTrait: number;       // deviation of maxVelocity from the species default, normalized in [-1, 1]
+  size: number;             // body size, from the speed: the slow boids are bigger and their energy lasts longer
   isPredator: boolean;
   isSuper: boolean;         // a Super Predator, added with the mouse: it hunts boids and predators for a while, then fades away
   generation: number;       // 0 for the first boids, then one more than the oldest parent

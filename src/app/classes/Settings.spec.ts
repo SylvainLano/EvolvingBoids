@@ -32,6 +32,11 @@ describe('Settings', () => {
     expect(values).toEqual({ alignmentRadius: 200, fleeFactor: -3, foodEnabled: false });
   });
 
+  it('should share the seasons too', () => {
+    expect(readSettings(new URLSearchParams('seasonsEnabled=false&yearDuration=60&winterFood=50')))
+      .toEqual({ seasonsEnabled: false, yearDuration: 20, winterFood: 50 });
+  });
+
   it('should remember the changed settings in the browser, and bring them back on the next visit', () => {
     const sim = new Simulation();
     const settings = new UserSettings({ view: view(), sim });

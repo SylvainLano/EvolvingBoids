@@ -7,7 +7,7 @@ export type SettingValues = Record<string, SettingValue>;
 
 // A setting of the options panels: whether it belongs to the display or to the simulation, and the values it accepts,
 // the same as in the options: a range for a number, a list for a choice, and any boolean otherwise
-interface Setting {
+export interface Setting {
   key: string;
   owner: 'view' | 'sim';
   range?: [number, number];
@@ -38,6 +38,9 @@ export const SETTINGS: readonly Setting[] = [
   { key: 'geneCostFactor', owner: 'sim', range: [0, 3] },
   { key: 'foodEnabled', owner: 'sim' },
   { key: 'fertileAreas', owner: 'sim', range: [1, 6] },
+  { key: 'seasonsEnabled', owner: 'sim' },
+  { key: 'yearDuration', owner: 'sim', range: [4, 20] },
+  { key: 'winterFood', owner: 'sim', range: [0, 100] },
   { key: 'fleeReset', owner: 'sim' },
   { key: 'boidEvolutionChances', owner: 'sim', range: [0, 100] },
   { key: 'boidEvolutionCap', owner: 'sim', range: [5, 95] },
@@ -78,6 +81,11 @@ export function readSettings(source: URLSearchParams | Record<string, unknown>):
     }
   }
   return values;
+}
+
+// Where a setting is and the values it accepts, for the options that show it
+export function findSetting(key: string): Setting | undefined {
+  return SETTINGS.find(setting => setting.key === key);
 }
 
 // The parameters of an address that belong to a shared link

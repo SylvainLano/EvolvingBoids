@@ -42,7 +42,7 @@
   right: 20px
   bottom: 20px
   width: 300px
-  height: 240px
+  height: 300px
   z-index: 8
   border-radius: 6px
   pointer-events: none
@@ -273,15 +273,6 @@
   .tool-button
     border-color: rgba(128, 128, 128, 0.5)
 
-.challenge-description
-  margin: 0 0 10px 18px
-  font-size: 11px
-  opacity: 0.7
-
-.challenge-done
-  margin-left: 6px
-  color: #22c55e
-
 .inspect-card
   position: absolute
   z-index: 9
@@ -340,55 +331,7 @@
 .demo-visible
   opacity: 0.6
 
-// Below the tool bar, which has the top of the screen for itself
-.display-container
-  position: relative
-  top: 50px
-  left: 30px
-  font-family: Monaco, monospace
-  user-select: none
-  height: fit-content
-  width: fit-content
-  padding-bottom: 20px
-
-.status-container
-  margin-bottom: 10px
-
-.form-container
-  opacity: 0.3
-  transition: opacity 0.3s ease
-
-  &:hover
-    opacity: 1
-
-.form-container a
-  font-weight: bold
-
-.hidden-options-light
-  margin-bottom: 20px
-
-.hidden-options-dark
-  margin-bottom: 20px
-  color: white
-
-.boid-display-dark
-  color: lightblue
-  font-size: 16px
-  font-family: Monaco, monospace
-
-.boid-display-light
-  color: blue
-  font-size: 16px
-  font-family: Monaco, monospace
-
-.predator-display-dark
-  color: pink
-  font-size: 16px
-
-.predator-display-light
-  color: red
-  font-size: 16px
-
+// The error messages, at the bottom left
 .fps-display-dark
   color: lightgreen
   font-size: 16px
@@ -397,48 +340,6 @@
   color: green
   font-size: 16px
 
-.slider-p
-  height: 15px
-
-.option
-  margin-top: 27px
-  margin-bottom: 1px
-  height: 15px
-  z-index: 10
-
-.boids-options-dark
-  color: lightblue
-
-.boids-options-light
-  color: darkblue
-
-.predators-options-dark
-  color: pink
-
-.predators-options-light
-  color: darkred
-
-.display-options-light
-  color: darkgreen
-
-.display-options-dark
-  color: lightgreen
-
-.display-options
-  margin: 0
-  padding: 0
-
-.simulation-blue-dark
-  color: lightblue
-
-.simulation-red-dark
-  color: pink
-
-.simulation-blue-light
-  color: darkblue
-
-.simulation-red-light
-  color: darkred
 // A touch screen has no keyboard for the keys of the tools, and no mouse to hover the faded interface
 @media (hover: none)
   .tool-key
@@ -446,9 +347,6 @@
 
   .tool-bar
     opacity: 1
-
-  .form-container
-    opacity: 0.8
 
 // On a narrow screen, the tool bar spans the width and scrolls sideways, with the actions first,
 // and the challenge card and the charts take the bottom of the screen
@@ -467,9 +365,6 @@
   .tool-separator
     order: -1
 
-  .display-container
-    left: 12px
-
 @media (max-width: 600px)
   .challenge-card
     top: auto
@@ -482,4 +377,4 @@
     right: 10px
     bottom: 10px
     width: calc(100vw - 20px)
-    height: 200px
+    height: 260px

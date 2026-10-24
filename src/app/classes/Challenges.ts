@@ -7,7 +7,7 @@ export type ChallengeState = 'running' | 'won' | 'lost';
 // Simulation settings a challenge starts with, restored when it ends
 const SETTINGS = [
   'simulationMode', 'numberOfBoids', 'numberOfPredators', 'predatorReproductionChances', 'predatorStarvationModificator',
-  'fertileAreas', 'foodEnabled', 'pauseSimulation',
+  'fertileAreas', 'foodEnabled', 'seasonsEnabled', 'yearDuration', 'winterFood', 'pauseSimulation',
 ] as const;
 type ChallengeSettings = Partial<Pick<Simulation, typeof SETTINGS[number]>>;
 
@@ -54,7 +54,7 @@ export const CHALLENGES: Challenge[] = [
     hint: 'The predators boom, eat the flocks, then starve: cull them with the eraser, shelter the boids, and use your 3 predators wisely.',
     settings: {
       simulationMode: 'Continued', numberOfBoids: 120, numberOfPredators: 6, predatorReproductionChances: 20, predatorStarvationModificator: 5,
-      fertileAreas: 3, foodEnabled: true,
+      fertileAreas: 3, foodEnabled: true, seasonsEnabled: false,
     },
     tools: ['predator', 'obstacle', 'current', 'eraser', 'food'],
     budget: { predator: 3 },
@@ -69,7 +69,7 @@ export const CHALLENGES: Challenge[] = [
     title: 'Fortress',
     goal: 'A Super Predator arrives every 15 seconds: keep at least 40 boids alive for 3 minutes.',
     hint: 'Super Predators can\'t cross the walls either: build a fortress, and lure them away with the currents.',
-    settings: { simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 0, fertileAreas: 3, foodEnabled: true },
+    settings: { simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 0, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['obstacle', 'current', 'food'],
     // A Super Predator enters from a random border at 5 seconds, then every 15 seconds
     update: (sim, seconds, memory) => {
@@ -95,7 +95,7 @@ export const CHALLENGES: Challenge[] = [
     hint: 'It starves if it doesn\'t eat: bring the flocks to it with the currents, pen them with walls, and drop your 10 boids when it is hungry.',
     settings: {
       simulationMode: 'Continued', numberOfBoids: 100, numberOfPredators: 1, predatorReproductionChances: 0, predatorStarvationModificator: 6,
-      fertileAreas: 2, foodEnabled: true,
+      fertileAreas: 2, foodEnabled: true, seasonsEnabled: false,
     },
     tools: ['boid', 'obstacle', 'current', 'eraser', 'food'],
     budget: { boid: 10 },
@@ -114,7 +114,7 @@ export const CHALLENGES: Challenge[] = [
     title: 'Arms Race',
     goal: 'Bring the average speed of the boids to +10 % within 20 minutes.',
     hint: 'Only the fast ones escape a strong predation: keep many predators hunting, and speed up the time.',
-    settings: { simulationMode: 'Infinite', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true },
+    settings: { simulationMode: 'Infinite', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['predator', 'superPredator', 'obstacle', 'current', 'food'],
     evaluate: reach(1200, sim => boidSpeed(sim) >= 10),
     progress: (sim, seconds) => ({
@@ -126,14 +126,35 @@ export const CHALLENGES: Challenge[] = [
     id: 'slow-and-steady',
     title: 'Slow and Steady',
     goal: 'Bring the average speed of the boids to -6 % within 20 minutes.',
-    hint: 'Natural selection alone is slow here: be a breeder, the colors show the speed, and the eraser removes the cyan ones, the fastest.',
-    settings: { simulationMode: 'Continued', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true },
+    hint: 'Natural selection alone is slow here: be a breeder, the size shows the speed, and the eraser removes the smallest ones, the fastest.',
+    settings: { simulationMode: 'Continued', numberOfBoids: 150, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 3, foodEnabled: true, seasonsEnabled: false },
     tools: ['eraser', 'obstacle', 'current', 'food'],
     evaluate: (sim, seconds) => livingBoids(sim) === 0 ? 'lost' : reach(1200, s => boidSpeed(s) <= -6)(sim, seconds),
     progress: (sim, seconds) => ({
       text: `${clock(seconds)} / 20:00 - speed ${signed(boidSpeed(sim))} (-6 % needed)`,
       ratio: Math.max(0, Math.min(1, -boidSpeed(sim) / 6)),
     }),
+  },
+  {
+    id: 'three-winters',
+    title: 'Three Winters',
+    goal: 'Harsh winters are coming: keep at least 20 boids alive until the end of the third winter, without any reinforcement.',
+    hint: 'In winter the plankton nearly vanishes: sow food where the flocks are, and keep the predators away from them with walls.',
+    settings: {
+      simulationMode: 'Continued', numberOfBoids: 120, numberOfPredators: 3, predatorReproductionChances: 10, fertileAreas: 2, foodEnabled: true,
+      seasonsEnabled: true, yearDuration: 6, winterFood: 5,
+    },
+    tools: ['food', 'obstacle', 'current'],
+    // The challenge starts at the end of a spring, it is won when the fourth year begins
+    evaluate: (sim) => livingBoids(sim) < 20 ? 'lost' : sim.season.year > 3 ? 'won' : 'running',
+    progress: (sim) => {
+      const season = sim.season;
+      const years = season.year - 1 + season.progress;
+      return {
+        text: `Year ${season.year}, ${season.name.toLowerCase()} - ${livingBoids(sim)} boids (20 needed)`,
+        ratio: Math.max(0, Math.min(1, (years - sim.yearStart) / (3 - sim.yearStart))),
+      };
+    },
   },
 ];
 

@@ -49,8 +49,10 @@ export class ChartRenderer {
     const foodColor = darkMode ? '#2dd4bf' : '#22a05a';
     const textColor = darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
     const gridColor = darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.12)';
+    const winterColor = darkMode ? 'rgba(148, 197, 255, 0.1)' : 'rgba(30, 64, 175, 0.07)';
+    const winters = samples.map(s => s.winter);
 
-    const rowHeight = (this.height - this.padding) / 3;
+    const rowHeight = (this.height - this.padding) / 4;
     const rows: { title: string, series: Series[], deviation: boolean }[] = [
       {
         title: 'Population',
@@ -77,16 +79,25 @@ export class ChartRenderer {
           { label: 'Predators', values: samples.map(s => s.predatorFertility), color: predatorColor, unit: '%' },
         ],
       },
+      {
+        title: 'Vision',
+        deviation: true,
+        series: [
+          { label: 'Boids', values: samples.map(s => s.boidVision), color: boidColor, unit: '%' },
+        ],
+      },
     ];
 
     rows.forEach((row, index) => {
       const top = this.padding + index * rowHeight;
-      this.drawRow(row.title, row.series, row.deviation, top, rowHeight - this.padding, textColor, gridColor);
+      this.drawRow(row.title, row.series, row.deviation, top, rowHeight - this.padding, textColor, gridColor, winters, winterColor);
     });
   }
 
   // Populations are each scaled to their own maximum, genes share a symmetric scale around the species default
-  private drawRow(title: string, series: Series[], deviation: boolean, top: number, height: number, textColor: string, gridColor: string) {
+  // The winters are shaded behind the lines
+  private drawRow(title: string, series: Series[], deviation: boolean, top: number, height: number, textColor: string, gridColor: string,
+    winters: boolean[], winterColor: string) {
     const ctx = this.ctx;
     const left = this.padding;
     const plotWidth = this.width - this.padding * 2;
@@ -94,6 +105,14 @@ export class ChartRenderer {
     const plotHeight = height - this.titleHeight;
     // A series without any value (the food without plankton) is not drawn at all
     series = series.filter(s => s.values.length === 0 || s.values.some(Number.isFinite));
+
+    const count = Math.max(winters.length - 1, this.minVisibleSamples);
+    ctx.fillStyle = winterColor;
+    winters.forEach((winter, i) => {
+      if (winter) {
+        ctx.fillRect(left + (i / count) * plotWidth, plotTop, plotWidth / count + 0.5, plotHeight);
+      }
+    });
 
     // Title, then the latest value of each series on the right
     ctx.font = '10px Monaco, monospace';

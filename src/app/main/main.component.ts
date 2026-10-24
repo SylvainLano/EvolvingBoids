@@ -1,8 +1,7 @@
 import { Component, OnInit, OnDestroy, ElementRef, ChangeDetectorRef, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { MatSliderModule } from '@angular/material/slider';
 import { BoidComponent } from '../boid/boid.component';
+import { OptionsComponent } from '../options/options.component';
 import { Quadtree } from '../classes/Quadtree';
 import { Boid, Point } from '../classes/Boid';
 import { CanvasRenderer, MutantHalo } from '../classes/CanvasRenderer';
@@ -16,7 +15,7 @@ import { Tool } from '../classes/Tool';
 import { Explainer, ExplanationArea, isArea } from '../classes/Explainer';
 import { SharedLink, UserSettings, linkKeys, linkQuery, parseLink, placeLines, shareLines } from '../classes/Settings';
 
-type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
+export type OptionsPanel = 'Simulation' | 'Display' | 'Boids' | 'Predator' | 'Challenges';
 
 // Content and position of the card describing the inspected boid
 interface Inspection {
@@ -25,7 +24,9 @@ interface Inspection {
   title: string;
   color: string;
   speed: string;
+  endurance: string | null;   // regular boids, with plankton: a slow boid is bigger, its energy lasts longer
   fertility: string;
+  vision: string | null;      // regular boids, how far they see the predators
   lifeLabel: string;
   life: string;
   energy: string | null;      // regular boids, with plankton
@@ -34,7 +35,7 @@ interface Inspection {
 // The display of the simulation and its controls: the animation loop, the mouse tools, the options
 @Component({
   selector: 'app-main',
-  imports: [NgClass, FormsModule, MatSliderModule, BoidComponent],
+  imports: [NgClass, BoidComponent, OptionsComponent],
   templateUrl: './main.component.html',
   styleUrls: ['./main.component.sass'],
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -296,6 +297,17 @@ export class MainComponent implements OnInit, OnDestroy {
     }
   }
 
+  // A color for each season, lighter on the dark sea
+  get seasonColor(): string {
+    const colors = {
+      Spring: ['#86efac', '#15803d'],
+      Summer: ['#fde047', '#a16207'],
+      Autumn: ['#fdba74', '#c2410c'],
+      Winter: ['#bae6fd', '#0369a1'],
+    };
+    return colors[this.sim.season.name][this.darkMode ? 0 : 1];
+  }
+
   // A phone, where the charts would cover a large part of the screen
   private static isNarrow(): boolean {
     return window.matchMedia('(max-width: 600px)').matches;
@@ -364,7 +376,7 @@ export class MainComponent implements OnInit, OnDestroy {
   // Clicks on the options or the tool bar are not meant for the tools
   isOnInterface(event: MouseEvent): boolean {
     const target = event.target as Element | null;
-    return typeof target?.closest === 'function' && target.closest('.display-container, .tool-bar, .challenge-card, .explain-bubble') !== null;
+    return typeof target?.closest === 'function' && target.closest('app-options, .tool-bar, .challenge-card, .explain-bubble') !== null;
   }
 
   // Some tools are not allowed during a challenge
@@ -511,21 +523,24 @@ export class MainComponent implements OnInit, OnDestroy {
 
     // The card stays inside the window, and where it was while the mouse is still
     const cardWidth = 230;
-    const cardHeight = 110;
+    const cardHeight = 150;
+    const regular = !boid.isPredator;
     this.inspection = {
       x: still ? this.inspection!.x : pointer.x + 16 + cardWidth > sim.width ? pointer.x - 16 - cardWidth : pointer.x + 16,
       y: still ? this.inspection!.y : pointer.y + 16 + cardHeight > sim.height ? pointer.y - 16 - cardHeight : pointer.y + 16,
       title: boid.isSuper
         ? 'Super Predator'
         : `${boid.isPredator ? 'Predator' : 'Boid'} - Generation ${boid.generation}${boid.isMutant ? ' - Mutant' : ''}`,
-      color: boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, this.darkMode, 1, boid.isSuper),
+      color: boidColor(boid.isPredator, false, boid.genome.lineage, 1, this.darkMode, 1, boid.isSuper),
       speed: percent(boid.genome.maxVelocity / (boid.isPredator ? sim.predatorMaxVelocity : sim.boidMaxVelocity) - 1),
+      endurance: regular && sim.foodEnabled ? percent(sim.endurance(boid) - 1) : null,
       fertility: boid.isSuper
         ? '-'
         : percent(1 - boid.genome.reproductionRate / (boid.isPredator ? sim.predatorReproductionRate : sim.boidReproductionRate)),
+      vision: regular ? `${percent(boid.genome.vision - 1)} (${Math.round(sim.sightRadius(boid))} px)` : null,
       lifeLabel,
       life,
-      energy: sim.foodEnabled && !boid.isPredator ? `${Math.round(boid.energy * 100)} %` : null,
+      energy: sim.foodEnabled && regular ? `${Math.round(boid.energy * 100)} %` : null,
     };
   }
 
@@ -561,7 +576,7 @@ export class MainComponent implements OnInit, OnDestroy {
     if ( this.explanationPoint === null ) {
       // Above the charts
       x = screenWidth - 20 - width;
-      y = screenHeight - 20 - 240 - 10 - height;
+      y = screenHeight - 20 - this.chartCanvas.nativeElement.offsetHeight - 10 - height;
     } else {
       // On the side of the center of the screen, so it doesn't go off the edges
       const point = this.explanationPoint;
@@ -655,7 +670,8 @@ export class MainComponent implements OnInit, OnDestroy {
       this.drawQuadtree ? this.finalQuadtreeList : null,
       { darkMode: this.darkMode, glow: this.glow, displayQuadtreeCount: this.displayQuadtreeCount },
       this.mutantHalos,
-      this.inspectedBoid,
+      this.inspectedBoid === null ? null
+        : { boid: this.inspectedBoid, sight: this.inspectedBoid.isPredator ? null : sim.sightRadius(this.inspectedBoid) },
       this.explained,
       {
         food: sim.foodEnabled

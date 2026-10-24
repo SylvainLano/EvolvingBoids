@@ -105,4 +105,23 @@ describe('Challenges', () => {
     expect(sim.pauseSimulation).toBe(false);
     expect(sim.predators.length).toBe(6);
   });
+
+  it('should win Three Winters when the fourth year begins with enough boids, and lose it with too few', () => {
+    runner.start(challenge('three-winters'));
+    expect(sim.seasonsEnabled).toBe(true);
+    sim.elapsedSteps = Math.round((3.01 - sim.yearStart) * sim.yearDuration * 60 * sim.stepsPerSecond);
+    runner.update();
+    expect(runner.state).toBe('won');
+
+    runner.retry();
+    sim.boids.slice(19).forEach(boid => boid.isDead = true);
+    runner.update();
+    expect(runner.state).toBe('lost');
+  });
+
+  it('should leave the seasons out of the challenges that were balanced without them', () => {
+    for (const other of CHALLENGES.filter(c => c.id !== 'three-winters')) {
+      expect(other.settings.seasonsEnabled).toBe(false);
+    }
+  });
 });

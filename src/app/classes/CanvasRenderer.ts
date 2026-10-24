@@ -59,8 +59,9 @@ export class CanvasRenderer {
   }
 
   // Groups are drawn in order, so the last one is on top
+  // The inspected boid is circled, with how far it sees the predators when it has the vision gene
   render(groups: Boid[][], quadtrees: Quadtree[] | null, options: RenderOptions, mutantHalos: MutantHalo[],
-    highlighted: Boid | null, explained: Boid | { center: Point, radius: number } | null, world: WorldDrawing) {
+    highlighted: { boid: Boid, sight: number | null } | null, explained: Boid | { center: Point, radius: number } | null, world: WorldDrawing) {
     this.fitToDisplaySize();
     const ctx = this.ctx;
     const now = performance.now();
@@ -121,7 +122,7 @@ export class CanvasRenderer {
 
     ctx.globalCompositeOperation = 'source-over';
     if (highlighted !== null) {
-      this.drawHighlight(highlighted, options.darkMode);
+      this.drawHighlight(highlighted.boid, highlighted.sight, options.darkMode);
     }
     if (explained !== null) {
       this.drawExplained(explained, now);
@@ -132,7 +133,7 @@ export class CanvasRenderer {
   }
 
   private color(boid: Boid, darkMode: boolean, opacity: number = 1): string {
-    return boidColor(boid.isPredator, boid.isDead, boid.speedTrait, boid.fertilityTrait, boid.alpha, darkMode, opacity, boid.isSuper);
+    return boidColor(boid.isPredator, boid.isDead, boid.genome.lineage, boid.alpha, darkMode, opacity, boid.isSuper);
   }
 
   // A wall the boids can't cross
@@ -202,20 +203,29 @@ export class CanvasRenderer {
     const boid = halo.boid;
     const ctx = this.ctx;
     ctx.lineWidth = 2;
-    ctx.strokeStyle = boidColor(boid.isPredator, false, boid.speedTrait, boid.fertilityTrait, 1, darkMode, 1 - progress);
+    ctx.strokeStyle = boidColor(boid.isPredator, false, boid.genome.lineage, 1, darkMode, 1 - progress);
     ctx.beginPath();
     ctx.arc(boid.position.x, boid.position.y, 4 + this.mutantHaloRadius * progress, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // A circle around the inspected boid
-  private drawHighlight(boid: Boid, darkMode: boolean) {
+  // A circle around the inspected boid, and a dashed one as far as it sees the predators
+  private drawHighlight(boid: Boid, sight: number | null, darkMode: boolean) {
     const ctx = this.ctx;
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)';
     ctx.beginPath();
     ctx.arc(boid.position.x, boid.position.y, this.bodyLength(boid) * 1.6, 0, Math.PI * 2);
     ctx.stroke();
+    if (sight !== null) {
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = darkMode ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.3)';
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.arc(boid.position.x, boid.position.y, sight, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 
   // A gently pulsing amber ring around what a bubble explains: a boid, or a whole area with a dashed line
@@ -252,8 +262,9 @@ export class CanvasRenderer {
     }
   }
 
+  // A slow boid is bigger, a fast one smaller, rounded so the halos can be reused
   private bodyLength(boid: Boid): number {
-    return boid.isSuper ? 18 : boid.isPredator ? 12 : 8;
+    return boid.isSuper ? 18 : (boid.isPredator ? 12 : 8) * Math.round(boid.size * 10) / 10;
   }
 
   private drawTrail(boid: Boid, darkMode: boolean) {
@@ -296,10 +307,9 @@ export class CanvasRenderer {
   // A soft radial gradient is costly to create, so each halo is pre-rendered once per (rounded) color and reused
   private haloSprite(boid: Boid, darkMode: boolean, radius: number): HTMLCanvasElement {
     const round = (value: number) => Math.round(value * 10) / 10;
-    const speed = round(boid.speedTrait);
-    const fertility = round(boid.fertilityTrait);
+    const lineage = round(boid.genome.lineage);
     const alpha = round(boid.alpha);
-    const key = `${boid.isPredator}|${boid.isSuper}|${speed}|${fertility}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
+    const key = `${boid.isPredator}|${boid.isSuper}|${lineage}|${alpha}|${darkMode}|${radius}|${this.pixelRatio}`;
 
     let sprite = this.haloSprites.get(key);
     if (sprite === undefined) {
@@ -308,8 +318,8 @@ export class CanvasRenderer {
       sprite.width = sprite.height = size;
       const spriteCtx = sprite.getContext('2d')!;
       const gradient = spriteCtx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      gradient.addColorStop(0, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, this.haloOpacity, boid.isSuper));
-      gradient.addColorStop(1, boidColor(boid.isPredator, false, speed, fertility, alpha, darkMode, 0, boid.isSuper));
+      gradient.addColorStop(0, boidColor(boid.isPredator, false, lineage, alpha, darkMode, this.haloOpacity, boid.isSuper));
+      gradient.addColorStop(1, boidColor(boid.isPredator, false, lineage, alpha, darkMode, 0, boid.isSuper));
       spriteCtx.fillStyle = gradient;
       spriteCtx.fillRect(0, 0, size, size);
       this.haloSprites.set(key, sprite);

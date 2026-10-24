@@ -93,11 +93,19 @@ describe('Explainer', () => {
     expect(explainer.current?.text).toContain('Generation 20');
   });
 
+  it('should explain the arrival of winter, around the plankton', () => {
+    sim.foodEnabled = true;
+    sim.elapsedSteps = Math.round((0.76 - sim.yearStart) * sim.yearDuration * 60 * sim.stepsPerSecond);
+    explainer.setEnabled(true, 10000, sim);
+    expect(explainer.current?.id).toBe('winter');
+    expect(isArea(explainer.current!.anchor)).toBe(true);
+  });
+
   it('should tell how a mutant differs from its parent', () => {
     explainer.setEnabled(true, 10000);
     const parent = boid();
     const child = boid();
-    child.genome = { maxVelocity: parent.genome.maxVelocity * 1.05, reproductionRate: parent.genome.reproductionRate };
+    child.genome = { ...parent.genome, maxVelocity: parent.genome.maxVelocity * 1.05 };
     explainer.notify({ type: 'mutant', boid: child, other: parent }, 10000);
     expect(explainer.current?.text).toContain('faster');
   });

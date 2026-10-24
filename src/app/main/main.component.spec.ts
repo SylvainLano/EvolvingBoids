@@ -62,10 +62,28 @@ describe('MainComponent', () => {
     expect(component.timeScale).toBe(1);
   });
 
-  it('should give numbers to the simulation from the sliders', async () => {
-    const links: HTMLAnchorElement[] = Array.from(fixture.nativeElement.querySelectorAll('.display-options a'));
-    links.find(link => link.textContent!.includes('Boids Options'))!.click();
+  // A section of the options panel, opened with its header
+  const openSection = async (title: string) => {
+    const headers: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('.section-header'));
+    headers.find(header => header.textContent!.includes(title))!.click();
     await fixture.whenStable();
+  };
+  const button = (text: string): HTMLButtonElement => Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('.section button'))
+    .find(element => element.textContent!.trim().startsWith(text))!;
+
+  it('should switch an option, and choose a value, in the options panel', async () => {
+    await openSection('Display');
+    button('Dark mode').click();
+    expect(component.darkMode).toBe(false);
+    await openSection('Simulation');
+    button('Continued').click();
+    expect(component.sim.simulationMode).toBe('Continued');
+    button('x4').click();
+    expect(component.timeScale).toBe(4);
+  });
+
+  it('should give numbers to the simulation from the sliders', async () => {
+    await openSection('Boids');
     const thumb: HTMLInputElement = fixture.nativeElement.querySelector('input[name="alignmentRadius"]');
     thumb.value = '120';
     thumb.dispatchEvent(new Event('input'));

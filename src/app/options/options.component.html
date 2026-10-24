@@ -1,0 +1,97 @@
+<!-- options.component.html -->
+<div class="panel" [class.panel-dark]="app.darkMode" [class.panel-light]="!app.darkMode">
+
+    @if (app.displayBoidCount || app.displayFPSCount) {
+        <div class="counters">
+            @if (app.displayBoidCount) {
+                <div class="counter counter-boids"><span class="counter-name">Boids</span><span class="counter-value">{{ app.sim.totalBoids }}</span><span class="counter-detail">gen {{ app.sim.stats.maxBoidGeneration }}</span></div>
+                <div class="counter counter-predators"><span class="counter-name">Predators</span><span class="counter-value">{{ app.sim.totalPredators }}</span><span class="counter-detail">gen {{ app.sim.stats.maxPredatorGeneration }}</span></div>
+                @if (app.sim.seasonsEnabled) {
+                    <div class="counter" [style.color]="app.seasonColor"><span class="counter-name">{{ app.sim.season.name }}</span><span class="counter-value"></span><span class="counter-detail">year {{ app.sim.season.year }}</span></div>
+                }
+            }
+            @if (app.displayFPSCount) {
+                <div class="counter counter-fps"><span class="counter-name">FPS</span><span class="counter-value">{{ app.fps }}</span><span class="counter-detail"></span></div>
+            }
+        </div>
+    }
+
+    @for (panel of app.optionsPanels; track panel) {
+        <button type="button" class="section-header" [class]="'accent-' + panel" [class.section-open]="app.openOptions === panel"
+            (click)="app.toggleOptions(panel)">
+            <span class="section-dot"></span>{{ titles[panel] }}<span class="section-sign">{{ app.openOptions === panel ? '-' : '+' }}</span>
+        </button>
+        @if (app.openOptions === panel) {
+            <div class="section" [class]="'accent-' + panel">
+
+                @if (panel === 'Simulation') {
+                    <div class="actions">
+                        <button type="button" class="action" (click)="app.sim.pauseSimulation = !app.sim.pauseSimulation">{{ app.sim.pauseSimulation ? 'Resume' : 'Pause' }}</button>
+                        <button type="button" class="action" (click)="app.restartButton()">Restart {{ app.challenges.active !== null ? 'challenge' : '' }}</button>
+                        <button type="button" class="action" title="A never ending screensaver, in fullscreen. Also with the D key, or the url index.html?demo"
+                            (click)="app.demo.start(true)">Demo</button>
+                    </div>
+                    <div class="label" title="Speed up the simulation to watch the evolution, also with the + and - keys">Speed</div>
+                    <div class="segments">
+                        @for (scale of app.timeScales; track scale) {
+                            <button type="button" class="segment" [class.selected]="app.timeScale === scale" (click)="app.timeScale = scale">x{{ scale }}</button>
+                        }
+                    </div>
+                }
+
+                @for (control of sections[panel]; track control.label) {
+                    @switch (control.kind) {
+                        @case ('heading') {
+                            <div class="heading">{{ control.label }}</div>
+                        }
+                        @case ('slider') {
+                            <div class="row" [title]="control.title ?? ''">
+                                <span class="label">{{ control.label }}</span>
+                                <span class="value">{{ value(control) }}{{ control.unit }}</span>
+                            </div>
+                            <mat-slider class="slider" [min]="min(control)" [max]="max(control)" [step]="control.step!">
+                                <input matSliderThumb [attr.name]="control.key" [ngModel]="value(control)" (ngModelChange)="set(control, $event)">
+                            </mat-slider>
+                        }
+                        @case ('toggle') {
+                            <button type="button" class="row toggle-row" role="switch" [attr.aria-checked]="value(control) === true"
+                                [title]="control.title ?? ''" (click)="set(control, value(control) !== true)">
+                                <span class="label">{{ control.label }}</span>
+                                <span class="toggle" [class.toggle-on]="value(control) === true"></span>
+                            </button>
+                        }
+                        @case ('choice') {
+                            <div class="label">{{ control.label }}</div>
+                            <div class="segments">
+                                @for (option of control.options; track option.value) {
+                                    <button type="button" class="segment" [class.selected]="value(control) === option.value"
+                                        [title]="option.title ?? ''" (click)="set(control, option.value)">{{ option.label }}</button>
+                                }
+                            </div>
+                        }
+                    }
+                }
+
+                @if (panel === 'Display') {
+                    <div class="note">Hold Shift and hover a boid to inspect it</div>
+                }
+
+                @if (panel === 'Challenges') {
+                    @for (challenge of app.challenges.challenges; track challenge.id) {
+                        <div class="challenge">
+                            <div class="challenge-head">
+                                <span class="challenge-name">{{ challenge.title }}</span>
+                                @if (app.challenges.results[challenge.id] !== undefined) {
+                                    <span class="challenge-done" title="Completed, best time in simulated time">&#10003; {{ clock(app.challenges.results[challenge.id]) }}</span>
+                                }
+                                <button type="button" class="action" (click)="app.startChallenge(challenge)">Start</button>
+                            </div>
+                            <div class="challenge-goal">{{ challenge.goal }}</div>
+                            <div class="challenge-hint">{{ challenge.hint }}</div>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    }
+</div>

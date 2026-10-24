@@ -19,8 +19,7 @@ describe('BoidComponent', () => {
     component.velocity = { x: 1, y: 0 };
     component.isPredator = false;
     component.isDead = false;
-    component.speedTrait = 0;
-    component.fertilityTrait = 0;
+    component.lineage = 0;
     component.alpha = 1;
     component.darkMode = false;
     fixture.detectChanges();

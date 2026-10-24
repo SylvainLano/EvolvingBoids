@@ -22,6 +22,7 @@ export class FoodField {
   readonly patchSpeed = 0.15;          // in px per step: a patch crosses the screen in a couple of minutes
   readonly regrowthRate = 0.0005;       // part of the missing food growing back per step: a grazed cell is 63 % full again after 2000 steps
   readonly decayRate = 0.0005;          // decay per step of the food above the capacity (sown or left by a patch)
+  productivity = 1;                     // the season: the fertile areas hold less in winter, so less grows back
   private patches: Patch[] = [];
   private width = 0;
   private height = 0;
@@ -135,7 +136,7 @@ export class FoodField {
           const distanceSquared = (x - patch.x) ** 2 + (y - patch.y) ** 2;
           capacity += Math.exp(-distanceSquared / (patch.radius * patch.radius * 0.5));
         }
-        this.capacity[row * this.cols + col] = Math.min(1, capacity);
+        this.capacity[row * this.cols + col] = Math.min(1, capacity) * this.productivity;
       }
     }
   }
@@ -202,6 +203,7 @@ export class FoodField {
   }
 
   // A small image with one pixel per cell, drawn scaled up and smoothed it looks like a glowing mist
+  // It turns from green blue in summer to an icy blue in winter
   texture(darkMode: boolean): HTMLCanvasElement {
     if (this.image === null || this.imageData === null) {
       this.image = document.createElement('canvas');
@@ -209,7 +211,11 @@ export class FoodField {
       this.image.height = this.rows;
       this.imageData = this.image.getContext('2d')!.createImageData(this.cols, this.rows);
     }
-    const [red, green, blue, maxAlpha] = darkMode ? [45, 212, 191, 0.32] : [34, 160, 90, 0.28];
+    const cold = Math.min(1, Math.max(0, (1 - this.productivity) / 0.7));
+    const mix = (summer: number, winter: number) => summer + (winter - summer) * cold;
+    const [red, green, blue, maxAlpha] = darkMode
+      ? [mix(45, 165), mix(212, 205), mix(191, 245), 0.32]
+      : [mix(34, 70), mix(160, 130), mix(90, 200), 0.28];
     const data = this.imageData.data;
     for (let i = 0; i < this.food.length; i++) {
       data[i * 4] = red;

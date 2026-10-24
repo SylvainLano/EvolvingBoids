@@ -9,7 +9,9 @@ export interface StatsSample {
   predatorSpeed: number;
   boidFertility: number;
   predatorFertility: number;
+  boidVision: number;           // only the boids have the vision gene
   food: number;                 // plankton compared to what the fertile areas can hold, in percent, NaN without plankton
+  winter: boolean;              // drawn as a band behind the charts
 }
 
 export interface SpeciesDefaults {
@@ -34,7 +36,8 @@ export class Statistics {
 
   // Called at each simulation step, records a sample at regular intervals
   // The food ratio is only computed when a sample is recorded
-  step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults, foodRatio: () => number) {
+  step(boids: Boid[], predators: Boid[], boidDefaults: SpeciesDefaults, predatorDefaults: SpeciesDefaults, foodRatio: () => number,
+    winter: boolean) {
     if (++this.stepsSinceSample < this.sampleInterval && this.samples.length > 0) {
       return;
     }
@@ -52,7 +55,9 @@ export class Statistics {
       predatorSpeed: predatorGenes.speed,
       boidFertility: boidGenes.fertility,
       predatorFertility: predatorGenes.fertility,
+      boidVision: boidGenes.vision,
       food: foodRatio() * 100,
+      winter,
     });
     if (this.samples.length > this.maxSamples) {
       this.samples.shift();
@@ -66,20 +71,23 @@ export class Statistics {
     }
   }
 
-  // A lower reproduction rate means a higher fertility
-  private averageGenes(population: Boid[], defaults: SpeciesDefaults): { speed: number, fertility: number } {
+  // A lower reproduction rate means a higher fertility, the vision is a factor of 1 by default
+  private averageGenes(population: Boid[], defaults: SpeciesDefaults): { speed: number, fertility: number, vision: number } {
     if (population.length === 0) {
-      return { speed: NaN, fertility: NaN };
+      return { speed: NaN, fertility: NaN, vision: NaN };
     }
     let maxVelocity = 0;
     let reproductionRate = 0;
+    let vision = 0;
     for (const boid of population) {
       maxVelocity += boid.genome.maxVelocity;
       reproductionRate += boid.genome.reproductionRate;
+      vision += boid.genome.vision;
     }
     return {
       speed: (maxVelocity / population.length / defaults.maxVelocity - 1) * 100,
       fertility: -(reproductionRate / population.length / defaults.reproductionRate - 1) * 100,
+      vision: (vision / population.length - 1) * 100,
     };
   }
 }

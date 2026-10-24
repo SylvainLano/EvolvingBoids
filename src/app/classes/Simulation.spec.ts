@@ -130,14 +130,14 @@ describe('Simulation', () => {
   it('should give the reinforcements of an extinct species the genes of its last dead', () => {
     const sim = emptySimulation();
     const dead = addBoid(sim, 100, 100);
-    dead.genome = { maxVelocity: 2.6, reproductionRate: 250 };
+    dead.genome = { maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, lineage: 0.5 };
     dead.generation = 7;
     sim.rememberGenes(dead);
     sim.boids = [];
     const heritages = sim.inheritGenes(false, 10);
     for (const heritage of heritages) {
       expect(heritage.generation).toBe(7);
-      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250 });
+      expect(heritage.genome).toEqual({ maxVelocity: 2.6, reproductionRate: 250, vision: 1.2, lineage: 0.5 });
       expect(heritage.genome).not.toBe(dead.genome);
     }
   });
@@ -200,6 +200,77 @@ describe('Simulation', () => {
       expect(child.genome.maxVelocity).toBeLessThanOrEqual(sim.boidMaxVelocity * (1 + sim.boidEvolutionCap / 100));
       expect(child.genome.maxVelocity).toBeGreaterThanOrEqual(sim.boidMaxVelocity * (1 - sim.boidEvolutionCap / 100));
     }
+  });
+
+  it('should pass the family color on unchanged, and shift it only with a mutation', () => {
+    const sim = emptySimulation();
+    const parent = addBoid(sim, 100, 100);
+    const partner = addBoid(sim, 110, 100);
+    parent.genome.lineage = partner.genome.lineage = 0.3;
+    sim.boidEvolutionChances = 0;
+    for (let i = 0; i < 20; i++) {
+      expect(sim.giveBirth(parent, partner)!.genome.lineage).toBe(0.3);
+    }
+    sim.boidEvolutionChances = 100;
+    for (let i = 0; i < 20; i++) {
+      expect(Math.abs(sim.giveBirth(parent, partner)!.genome.lineage - 0.3)).toBeCloseTo(sim.lineageStep);
+    }
+  });
+
+  it('should let a boid see a predator as far as its vision', () => {
+    const fleeing = (vision: number) => {
+      const sim = emptySimulation();
+      sim.foodEnabled = false;
+      const boid = addBoid(sim, 300, 300);
+      boid.genome.vision = vision;
+      const predator = addBoid(sim, 380, 300, 0, 0, true);
+      predator.reproductionCooldown = 1000;
+      sim.step();
+      return boid.velocity.x;
+    };
+    expect(fleeing(1.5)).toBeLessThan(0);
+    expect(fleeing(1)).toBe(0);
+  });
+
+  it('should make good eyes cost energy', () => {
+    const spent = (vision: number) => {
+      const sim = emptySimulation();
+      const boid = addBoid(sim, 300, 300);
+      sim.food.erase({ x: 300, y: 300 }, 200);
+      boid.genome.vision = vision;
+      boid.energy = 0.5;
+      sim.step();
+      return 0.5 - boid.energy;
+    };
+    expect(spent(1.5)).toBeGreaterThan(spent(1));
+    expect(spent(0.5)).toBeLessThan(spent(1));
+  });
+
+  it('should make the slow boids bigger and more enduring, the fast ones smaller', () => {
+    const sim = emptySimulation();
+    const born = (speed: number) => sim.insertNewBoid({ x: 100, y: 100 }, { x: 0, y: 0 }, false,
+      { ...sim.createGenome(false), maxVelocity: sim.boidMaxVelocity * speed }, 0)!;
+    const slow = born(0.9);
+    const fast = born(1.1);
+    expect(slow.size).toBeCloseTo(1.15);
+    expect(fast.size).toBeCloseTo(0.85);
+    expect(sim.endurance(slow)).toBeGreaterThan(1);
+    expect(sim.endurance(fast)).toBeLessThan(1);
+  });
+
+  it('should follow the seasons: the plankton at its best in summer, scarce in winter', () => {
+    const sim = emptySimulation();
+    const at = (yearProgress: number) => {
+      sim.elapsedSteps = Math.round((yearProgress - sim.yearStart) * sim.yearDuration * 60 * sim.stepsPerSecond);
+      return { season: sim.season.name, productivity: sim.productivity };
+    };
+    expect(at(0.375)).toEqual({ season: 'Summer', productivity: 1 });
+    expect(at(0.875).season).toBe('Winter');
+    expect(at(0.875).productivity).toBeCloseTo(sim.winterFood / 100);
+    expect(at(1.6).season).toBe('Autumn');
+    expect(sim.season.year).toBe(2);
+    sim.seasonsEnabled = false;
+    expect(sim.productivity).toBe(1);
   });
 
   it('should tell the display about the births, the mutants, the captures and the causes of death', () => {
