@@ -14,6 +14,7 @@ type ShotKind = 'wide' | 'medium' | 'close';
 
 interface Shot {
   kind: ShotKind;
+  start: number;          // performance.now() at its start
   end: number;            // performance.now() at its end
   subject: Boid | null;   // the boid whose flock is followed
 }
@@ -28,7 +29,7 @@ interface DemoScene {
   maxPredators: number;   // over this, predators stop reproducing
 }
 
-const SCENES: DemoScene[] = [
+export const SCENES: DemoScene[] = [
   {
     title: 'Shoal',
     ambiance: 'abyss',
@@ -50,8 +51,8 @@ const SCENES: DemoScene[] = [
   {
     title: 'Night Hunt',
     ambiance: 'neon',
-    params: { alignmentRadius: 35, cohesionRadius: 45, boidsSeparationRadius: 20, fleeRadius: 140, fleeFactor: 9, predatorsSeparationRadius: 50, trailLength: 14 },
-    minBoids: 150, maxBoids: 280, minPredators: 4, maxPredators: 8,
+    params: { alignmentRadius: 35, cohesionRadius: 45, boidsSeparationRadius: 20, fleeRadius: 100, fleeFactor: 6, predatorsSeparationRadius: 50, trailLength: 14 },
+    minBoids: 150, maxBoids: 280, minPredators: 1, maxPredators: 2,
   },
   {
     title: 'Ink',
@@ -59,7 +60,43 @@ const SCENES: DemoScene[] = [
     params: { alignmentRadius: 45, cohesionRadius: 55, boidsSeparationRadius: 22, fleeRadius: 90, fleeFactor: 6, predatorsSeparationRadius: 70, trailLength: 8 },
     minBoids: 120, maxBoids: 240, minPredators: 2, maxPredators: 4,
   },
+  {
+    title: 'Reef',
+    ambiance: 'reef',
+    params: { alignmentRadius: 40, cohesionRadius: 60, boidsSeparationRadius: 18, fleeRadius: 85, fleeFactor: 5, predatorsSeparationRadius: 90, trailLength: 6 },
+    minBoids: 140, maxBoids: 280, minPredators: 1, maxPredators: 3,
+  },
+  {
+    title: 'Cosmos',
+    ambiance: 'cosmos',
+    params: { alignmentRadius: 55, cohesionRadius: 80, boidsSeparationRadius: 25, fleeRadius: 90, fleeFactor: 5, predatorsSeparationRadius: 100, trailLength: 12 },
+    minBoids: 120, maxBoids: 240, minPredators: 1, maxPredators: 3,
+  },
+  {
+    title: 'Storm',
+    ambiance: 'storm',
+    params: { alignmentRadius: 60, cohesionRadius: 70, boidsSeparationRadius: 18, fleeRadius: 110, fleeFactor: 7, predatorsSeparationRadius: 90, trailLength: 8 },
+    minBoids: 180, maxBoids: 320, minPredators: 2, maxPredators: 3,
+  },
+  {
+    title: 'Embers',
+    ambiance: 'embers',
+    params: { alignmentRadius: 20, cohesionRadius: 35, boidsSeparationRadius: 28, fleeRadius: 70, fleeFactor: 4, predatorsSeparationRadius: 70, trailLength: 6 },
+    minBoids: 130, maxBoids: 260, minPredators: 1, maxPredators: 3,
+  },
+  {
+    title: 'Sakura',
+    ambiance: 'sakura',
+    params: { alignmentRadius: 65, cohesionRadius: 85, boidsSeparationRadius: 20, fleeRadius: 95, fleeFactor: 5, predatorsSeparationRadius: 110, trailLength: 8 },
+    minBoids: 160, maxBoids: 300, minPredators: 1, maxPredators: 2,
+  },
 ];
+
+// A scene named in a link, by its title or its ambiance, whatever the case and the spaces: night-hunt, Sakura...
+export function findScene(name: string): number {
+  const simple = (text: string) => text.toLowerCase().replace(/[^a-z]/g, '');
+  return SCENES.findIndex(scene => simple(scene.title) === simple(name) || scene.ambiance === simple(name));
+}
 
 // Settings changed by the demo, restored when it stops: some of the display, some of the simulation
 // The ambiance first: it sets the dark mode that suits it, the one of the user comes after
@@ -72,7 +109,7 @@ type SavedView = Partial<Pick<MainComponent, typeof SAVED_VIEW[number]>>;
 type SavedSimulation = Partial<Pick<Simulation, typeof SAVED_SIMULATION[number]>>;
 
 // The cinema mode, a screensaver: no interface, scenes following each other, each in its own ambiance, a camera framing
-// the flocks, and a director keeping the ecosystem alive forever
+// the flocks, and a director keeping the ecosystem alive forever. The user can choose a scene, and stay on it
 export class DemoMode {
   active = false;
   sceneTitle = '';
@@ -80,19 +117,23 @@ export class DemoMode {
   showHint = false;           // how to exit is displayed for a while when the mouse moves
   fade = 0;                   // the black veil between two scenes, from 0 to 1
   camera: Camera = { x: 0, y: 0, zoom: 1 };
+  locked = false;             // the scene goes on until it is unlocked, instead of giving way to the next one
 
   readonly sceneDuration = 150000;
+  readonly unlockedRest = 20000;          // once unlocked, a scene goes on at least this long before the next one
   readonly transitionDuration = 12000;
   readonly titleDuration = 6000;
-  readonly hintDuration = 2500;
+  readonly hintDuration = 3000;
   readonly fadeDuration = 1500;           // to black at the end of a scene, and back at the start of the next one
   readonly shotZooms: Record<ShotKind, number> = { wide: 1, medium: 1.6, close: 2.3 };
   readonly shotDurations: Record<ShotKind, [number, number]> = { wide: [10000, 15000], medium: [18000, 26000], close: [16000, 24000] };
   readonly panStiffness = 0.8;            // in radians per second: the camera settles on a new framing in about 6 seconds
+  readonly followStiffness = 1.6;         // then it holds the followed flock tighter, so that a fast one doesn't leave the picture
+  readonly tighteningTime = 3;            // in seconds from the start of a shot, to hold the flock tighter
   readonly zoomStiffness = 0.45;
   readonly flockRadius = 90;              // in px, the boids around the followed one make the flock the camera frames
   readonly leadTime = 0.4;                // in seconds: the camera looks a little ahead of the flock, which swims into the picture
-  readonly borderMargin = 0.6;            // part of the half picture the camera may show beyond the world, to keep a flock near a border in the middle
+  readonly brakingDistance = 50;          // in px from a border, the camera starts slowing down
   readonly directorInterval = 1000;
   readonly boidReproductionChances = 30;      // reproduction chances in percent, when the population is not too large
   readonly predatorReproductionChances = 10;
@@ -102,15 +143,18 @@ export class DemoMode {
   private savedSimulation: SavedSimulation = {};
   private sceneIndex = -1;
   private sceneStart = 0;
+  private sceneEnd = 0;                            // Infinity while the scene is locked
+  private chosenIndex: number | null = null;       // the scene chosen by the user, coming after the fade to black
   private fromParams!: SceneParams;
   private lastDirectorTick = 0;
   private lastFlockArrival = 0;
   private lastPredatorArrival = 0;
   private lastMouseMove = -Infinity;
-  private shot: Shot = { kind: 'wide', end: 0, subject: null };
+  private shot: Shot = { kind: 'wide', start: 0, end: 0, subject: null };
   private cameraSpeed = { x: 0, y: 0, zoom: 0 };
   private flock = { x: 0, y: 0, vx: 0, vy: 0 };     // where the followed flock is, and how fast it swims, smoothed
   private lastFrame = 0;
+  private worldSize = { width: 0, height: 0 };     // the size of the world the camera was placed in
   private wakeLock: WakeLockSentinel | null = null;
   private enteredFullscreen = false;
 
@@ -121,10 +165,14 @@ export class DemoMode {
   }
 
   // Fullscreen can only be requested from a user action (click, key)
-  start(fullscreen: boolean) {
+  // A scene named by a link comes first, and stays
+  start(fullscreen: boolean, sceneName: string | null = null) {
     if (this.active) {
       return;
     }
+    const chosen = sceneName === null ? -1 : findScene(sceneName);
+    this.chosenIndex = chosen >= 0 ? chosen : null;
+    this.locked = chosen >= 0;
     // The demo drives the simulation on its own: a running challenge is left
     this.app.challenges.close();
     this.active = true;
@@ -140,7 +188,8 @@ export class DemoMode {
     // It starts with a wide shot
     this.camera = { x: this.sim.width / 2, y: this.sim.height / 2, zoom: 1 };
     this.cameraSpeed = { x: 0, y: 0, zoom: 0 };
-    this.shot = { kind: 'wide', end: now + this.shotDurations.wide[0], subject: null };
+    this.shot = { kind: 'wide', start: now, end: now + this.shotDurations.wide[0], subject: null };
+    this.worldSize = { width: this.sim.width, height: this.sim.height };
     this.lastFrame = now;
     this.lastDirectorTick = this.lastFlockArrival = this.lastPredatorArrival = now;
 
@@ -182,18 +231,17 @@ export class DemoMode {
     if (!this.active) {
       return;
     }
-    const elapsed = timestamp - this.sceneStart;
-    if (elapsed >= this.sceneDuration) {
+    if (timestamp >= this.sceneEnd) {
       this.nextScene(timestamp);
       this.cut(timestamp);
     } else {
-      this.morph(Math.min(1, elapsed / this.transitionDuration));
+      this.morph(Math.min(1, (timestamp - this.sceneStart) / this.transitionDuration));
     }
-    this.showTitle = elapsed < this.titleDuration;
+    const sinceStart = timestamp - this.sceneStart;
+    this.showTitle = sinceStart < this.titleDuration;
     this.showHint = timestamp - this.lastMouseMove < this.hintDuration;
     // From black at the start of a scene, to black at its end: the ambiance changes in the dark
-    const sinceStart = timestamp - this.sceneStart;
-    this.fade = Math.max(0, 1 - sinceStart / this.fadeDuration, 1 - (this.sceneDuration - sinceStart) / this.fadeDuration);
+    this.fade = Math.max(0, 1 - sinceStart / this.fadeDuration, 1 - (this.sceneEnd - timestamp) / this.fadeDuration);
     this.moveCamera(timestamp);
 
     if (timestamp - this.lastDirectorTick >= this.directorInterval) {
@@ -204,6 +252,32 @@ export class DemoMode {
 
   onMouseMove() {
     this.lastMouseMove = performance.now();
+  }
+
+  // The title of the scene on the screen, or of the one chosen to come next
+  get chosenTitle(): string {
+    return SCENES[this.chosenIndex ?? this.sceneIndex]?.title ?? '';
+  }
+
+  // Stay on this scene, or let the scenes follow each other again. A scene already fading away gives way to the next one,
+  // which stays. An unlocked scene doesn't end at once, the time to enjoy it a little longer
+  toggleLock() {
+    const now = this.lastFrame;
+    this.locked = !this.locked;
+    if (this.locked && this.chosenIndex === null && this.sceneEnd - now > this.fadeDuration) {
+      this.sceneEnd = Infinity;
+    } else if (!this.locked && this.sceneEnd === Infinity) {
+      this.sceneEnd = Math.max(this.sceneStart + this.sceneDuration, now + this.unlockedRest);
+    }
+    this.onMouseMove();
+  }
+
+  // The next or the previous scene, after a fade to black from where the veil already is. Locked, the chosen one stays
+  changeScene(step: number) {
+    const now = this.lastFrame;
+    this.chosenIndex = ((this.chosenIndex ?? this.sceneIndex) + step + SCENES.length) % SCENES.length;
+    this.sceneEnd = Math.min(this.sceneEnd, now + this.fadeDuration * (1 - this.fade));
+    this.onMouseMove();
   }
 
   // A click or a tap shows how to exit, a second one while it is shown exits: a phone has no key to do it
@@ -244,44 +318,90 @@ export class DemoMode {
       predatorsSeparationRadius: this.sim.predatorsSeparationRadius,
       trailLength: this.sim.trailLength,
     };
-    // A random scene, never the same twice in a row
-    let index = Math.floor(Math.random() * SCENES.length);
-    if (index === this.sceneIndex) {
+    // The scene chosen by the user, or a random one, never the same twice in a row
+    let index = this.chosenIndex ?? Math.floor(Math.random() * SCENES.length);
+    if (this.chosenIndex === null && index === this.sceneIndex) {
       index = (index + 1) % SCENES.length;
     }
+    this.chosenIndex = null;
     this.sceneIndex = index;
     this.sceneStart = timestamp;
+    this.sceneEnd = this.locked ? Infinity : timestamp + this.sceneDuration;
     this.sceneTitle = this.scene.title;
     const ambiance = AMBIANCES[this.scene.ambiance];
     Object.assign(this.app, { ambiance: ambiance.name, boidShape: ambiance.shape, darkMode: ambiance.dark ?? true });
+    // The predators beyond those of the new scene leave in the dark
+    this.sim.retire(this.sim.predators.filter(predator => !predator.isDead && !predator.isSuper).slice(this.scene.maxPredators));
   }
 
   // The camera moves like critically damped springs: it speeds up and slows down smoothly, never overshoots, and
-  // follows a swimming flock without lagging behind, its speed being fed forward. The background covers the whole screen,
-  // so it may show a little beyond the world, which is better than stopping abruptly at a border
+  // follows a swimming flock without lagging behind, its speed being fed forward
+  // It never shows beyond the world, without ever stopping abruptly: its target stays inside the world, and it only
+  // steps back as far as the picture stays inside, coming back toward the middle first
   private moveCamera(timestamp: number) {
     const elapsed = Math.min(0.1, Math.max(0, (timestamp - this.lastFrame) / 1000));
     this.lastFrame = timestamp;
     if (timestamp >= this.shot.end) {
       this.nextShot(timestamp);
     }
-    const target = this.framing(elapsed);
+    // The world got another size (a phone turned, a window resized): the camera keeps its place in it, like the boids
+    if (this.sim.width !== this.worldSize.width || this.sim.height !== this.worldSize.height) {
+      const scaleX = this.worldSize.width > 0 ? this.sim.width / this.worldSize.width : 1;
+      const scaleY = this.worldSize.height > 0 ? this.sim.height / this.worldSize.height : 1;
+      this.camera.x *= scaleX;
+      this.camera.y *= scaleY;
+      this.flock.x *= scaleX;
+      this.flock.y *= scaleY;
+      this.cameraSpeed = { x: 0, y: 0, zoom: 0 };
+      this.worldSize = { width: this.sim.width, height: this.sim.height };
+    }
     const camera = this.camera;
+    const target = this.framing(elapsed, camera.zoom);
     const speed = this.cameraSpeed;
     const spring = (position: number, velocity: number, goal: number, goalVelocity: number, stiffness: number) =>
       velocity + (stiffness ** 2 * (goal - position) + 2 * stiffness * (goalVelocity - velocity)) * elapsed;
-    speed.zoom = spring(camera.zoom, speed.zoom, target.zoom, 0, this.zoomStiffness);
+    const widest = this.widestZoom();
+    speed.zoom = spring(camera.zoom, speed.zoom, Math.max(target.zoom, widest), 0, this.zoomStiffness);
     camera.zoom = Math.max(1, camera.zoom + speed.zoom * elapsed);
-    speed.x = spring(camera.x, speed.x, target.x, target.vx, this.panStiffness);
-    speed.y = spring(camera.y, speed.y, target.y, target.vy, this.panStiffness);
+    // Gentle at the start of a shot, the time to reach the flock, then tighter
+    const tightening = this.shot.kind === 'wide' ? 0 : Math.min(1, (timestamp - this.shot.start) / 1000 / this.tighteningTime);
+    const stiffness = this.panStiffness + (this.followStiffness - this.panStiffness) * tightening;
+    speed.x = spring(camera.x, speed.x, target.x, target.vx, stiffness);
+    speed.y = spring(camera.y, speed.y, target.y, target.vy, stiffness);
     camera.x += speed.x * elapsed;
     camera.y += speed.y * elapsed;
+    this.keepInside();
+  }
+
+  // The widest zoom that keeps the picture inside the world, where the camera is
+  private widestZoom(): number {
+    const { x, y } = this.camera;
+    const width = this.sim.width;
+    const height = this.sim.height;
+    return Math.max(1, width / 2 / Math.max(1, Math.min(x, width - x)), height / 2 / Math.max(1, Math.min(y, height - y)));
+  }
+
+  // A last guard, which the springs shouldn't need: the picture inside the world, the camera stopped against the border
+  private keepInside() {
+    const camera = this.camera;
+    const halfWidth = this.sim.width / 2 / camera.zoom;
+    const halfHeight = this.sim.height / 2 / camera.zoom;
+    const x = Math.min(this.sim.width - halfWidth, Math.max(halfWidth, camera.x));
+    const y = Math.min(this.sim.height - halfHeight, Math.max(halfHeight, camera.y));
+    if (x !== camera.x) {
+      camera.x = x;
+      this.cameraSpeed.x = 0;
+    }
+    if (y !== camera.y) {
+      camera.y = y;
+      this.cameraSpeed.y = 0;
+    }
   }
 
   // Between two scenes, in the dark, the camera cuts to a new shot instead of moving
   private cut(timestamp: number) {
     this.nextShot(timestamp);
-    const target = this.framing(0);
+    const target = this.framing(0, Infinity);
     this.camera = { x: target.x, y: target.y, zoom: target.zoom };
     this.cameraSpeed = { x: 0, y: 0, zoom: 0 };
   }
@@ -299,15 +419,16 @@ export class DemoMode {
       const largest = this.largestFlock();
       subject = keep ? previous.subject : largest === null ? null : this.closestBoid(largest);
     }
-    this.shot = { kind: subject === null ? 'wide' : kind, end: timestamp + shortest + Math.random() * (longest - shortest), subject };
+    this.shot = { kind: subject === null ? 'wide' : kind, start: timestamp, end: timestamp + shortest + Math.random() * (longest - shortest), subject };
     if (subject !== null) {
       this.flock = this.measureFlock(subject);
     }
   }
 
   // Where the shot wants the camera: the center of the world for a wide shot, otherwise the followed flock, a little ahead
-  // of it, showing little beyond the world. Where it is held back, the camera doesn't follow the speed of the flock
-  private framing(elapsed: number): { x: number, y: number, vx: number, vy: number, zoom: number } {
+  // of it, held so that the picture stays inside the world, at the zoom of the shot and at the current one, the widest.
+  // Where it is held back, the camera doesn't follow the speed of the flock
+  private framing(elapsed: number, currentZoom: number): { x: number, y: number, vx: number, vy: number, zoom: number } {
     const width = this.sim.width;
     const height = this.sim.height;
     if (this.shot.kind !== 'wide' && (this.shot.subject === null || this.shot.subject.isDead)) {
@@ -327,19 +448,15 @@ export class DemoMode {
     flock.vx += (measured.vx - flock.vx) * smoothing;
     flock.vy += (measured.vy - flock.vy) * smoothing;
     const zoom = this.shotZooms[this.shot.kind];
-    const hold = (wanted: number, size: number) => {
-      const half = size / 2 / zoom * (1 - this.borderMargin);
-      return Math.min(size - half, Math.max(half, wanted));
-    };
-    const x = hold(flock.x + flock.vx * this.leadTime, width);
-    const y = hold(flock.y + flock.vy * this.leadTime, height);
-    return {
-      x,
-      y,
-      vx: x === flock.x + flock.vx * this.leadTime ? flock.vx : 0,
-      vy: y === flock.y + flock.vy * this.leadTime ? flock.vy : 0,
-      zoom,
-    };
+    const halfWidth = width / 2 / Math.min(zoom, currentZoom);
+    const halfHeight = height / 2 / Math.min(zoom, currentZoom);
+    const hold = (wanted: number, size: number, half: number) => Math.min(size - half, Math.max(half, wanted));
+    // The speed of the flock is followed less and less toward a border, so that the camera slows down before it
+    const brake = (position: number, velocity: number, size: number, half: number) =>
+      velocity * Math.max(0, Math.min(1, (velocity < 0 ? position - half : size - half - position) / this.brakingDistance));
+    const x = hold(flock.x + flock.vx * this.leadTime, width, halfWidth);
+    const y = hold(flock.y + flock.vy * this.leadTime, height, halfHeight);
+    return { x, y, vx: brake(x, flock.vx, width, halfWidth), vy: brake(y, flock.vy, height, halfHeight), zoom };
   }
 
   // The boids around one of them
@@ -374,23 +491,28 @@ export class DemoMode {
     return closest;
   }
 
-  // The center of the largest flock, among the boids around a few of them
+  // The center of the flock worth filming, among the boids around a few of them: a large one, away from the borders,
+  // as the camera can't center a flock along a border without showing beyond the world
   private largestFlock(): { x: number, y: number } | null {
     const boids = this.sim.boids.filter(boid => !boid.isDead);
-    let largest: Boid[] = [];
+    const width = this.sim.width;
+    const height = this.sim.height;
+    let best: { x: number, y: number } | null = null;
+    let bestScore = 0;
     for (const boid of boids.slice(0, 40)) {
       const flock = boids.filter(other => (other.position.x - boid.position.x) ** 2 + (other.position.y - boid.position.y) ** 2 < 120 ** 2);
-      if (flock.length > largest.length) {
-        largest = flock;
+      const center = {
+        x: flock.reduce((sum, other) => sum + other.position.x, 0) / flock.length,
+        y: flock.reduce((sum, other) => sum + other.position.y, 0) / flock.length,
+      };
+      const border = Math.min(center.x, width - center.x, center.y, height - center.y);
+      const score = flock.length * (0.2 + 0.8 * Math.min(1, border / (Math.min(width, height) / 4)));
+      if (score > bestScore) {
+        best = center;
+        bestScore = score;
       }
     }
-    if (largest.length === 0) {
-      return null;
-    }
-    return {
-      x: largest.reduce((sum, boid) => sum + boid.position.x, 0) / largest.length,
-      y: largest.reduce((sum, boid) => sum + boid.position.y, 0) / largest.length,
-    };
+    return best;
   }
 
   // Smoothly move the parameters from the previous scene to the current one

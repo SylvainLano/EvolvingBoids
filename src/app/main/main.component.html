@@ -83,7 +83,25 @@
         </div>
     }
     <div class="demo-title" [class.demo-visible]="demo.active && demo.showTitle" [class.demo-light]="!darkMode">{{ demo.sceneTitle }}</div>
-    <div class="demo-hint" [class.demo-visible]="demo.active && demo.showHint" [class.demo-light]="!darkMode">Click again, or press D or Esc, to exit the cinema mode</div>
+    <!-- The buttons of the cinema mode come with the hint, a click outside them exits; they don't take the focus from the keys -->
+    <div class="demo-controls" [class.demo-visible]="demo.active && demo.showHint" [class.demo-light]="!darkMode" (mousedown)="$event.preventDefault()">
+        <div class="demo-buttons">
+            <button type="button" class="demo-button" title="Previous scene (←)" aria-label="Previous scene" (click)="demo.changeScene(-1)">&lsaquo;</button>
+            <button type="button" class="demo-button demo-scene" [class.demo-locked]="demo.locked" (click)="demo.toggleLock()"
+                [title]="demo.locked ? 'Let the scenes follow each other again (Space)' : 'Stay on this scene (Space)'"
+                [attr.aria-pressed]="demo.locked">
+                <svg class="demo-padlock" viewBox="0 0 16 16" aria-hidden="true">
+                    <rect x="3" y="7" width="10" height="8" rx="1.5" fill="currentColor"/>
+                    <path [attr.d]="demo.locked ? 'M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2' : 'M5.2 7V5a2.8 2.8 0 0 1 5.6 0'" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
+                {{ demo.chosenTitle }}
+            </button>
+            <button type="button" class="demo-button" title="Next scene (→)" aria-label="Next scene" (click)="demo.changeScene(1)">&rsaquo;</button>
+            <button type="button" class="demo-button" title="Exit the cinema mode (D or Esc)" aria-label="Exit the cinema mode" (click)="demo.stop()">&times;</button>
+        </div>
+        <div class="demo-hint">Click again, or press D or Esc, to exit the cinema mode</div>
+        <div class="demo-hint demo-keys">Space stays on this scene, ← → choose another one</div>
+    </div>
 </div>
 
 <div class="tool-bar" [class.demo-hidden]="demo.active" [class.tool-bar-attention]="explainGlows" [ngClass]="darkMode ? 'tool-bar-dark' : 'tool-bar-light'">

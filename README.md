@@ -10,13 +10,19 @@
 - Their shape is chosen in the Display Options: arrow heads, fish waving their tails (sharks for the predators), birds flapping their wings (hawks for the predators), the letter of their family (lowercase boids, uppercase predators, a mutant gets the next or the previous letter), or glowing comets  
 - The Ambiance of the Display Options gives the world its background, the colors of the families, of the plankton and of the algae, and the dark mode that suits it:
   - Classic: the usual sea, dark or light  
-  - Abyss: bioluminescent fish in the deep sea, under swaying light shafts and falling marine snow  
+  - Abyss: bioluminescent fish in the deep sea, under swaying light shafts, among rising bubbles and fine marine snow slowly falling  
   - Sunset: dark birds against a sunset sky, like a murmuration of starlings, without glow  
   - Aurora: glowing boids under the northern lights rippling among the stars  
   - Neon: rainbow light painting on a black grid, the color of a boid is its heading  
   - Paper: ink on paper, the trails like brush strokes  
-- The Long trails of the Display Options are trails of light fading away in a few seconds, like a long exposure photograph: each ambiance has its own length, from half a second for the birds of the sunset to 2.5 seconds under the aurora  
-- The backgrounds belong to the scene: the camera of the cinema mode films them like the world, its grid, its sun, its lights, and they go on a little beyond it. Only the darker edges of the picture, an effect of the lens, stay on the screen. They are only decoration, the simulation knows nothing about them. Drawing a frame takes about as long in every ambiance (0.3 to 1.7 ms, measured), and under 40 FPS they lighten their effects: fewer lights, shorter trails  
+  - Reef: yellow and orange tropical fish (blue and pink for the far families) and grey sharks in the daylight of a reef, seen from above, under the rippling light of the surface, the algae like pink corals  
+  - Cosmos: blue-white comets among the nebulae and the drifting stars, hunted by red stars  
+  - Storm: pale seabirds hunted by dark ones in a stormy sky, under a slanting rain. Now and then, a lightning hidden in the clouds lights the sky up slowly and fades away: never a flash, at most one every 12 seconds  
+  - Embers: sparks over a breathing fire, among the sparks rising from it, hunted by white-hot ones  
+  - Sakura: plum birds in a pale dawn over faint hills, among the falling and tumbling cherry petals, the algae like dark branches  
+- The Long trails of the Display Options are trails of light fading away in a few seconds, like a long exposure photograph: each ambiance has its own length, from 0.4 second for the birds of the storm to 3 seconds for the comets of the cosmos  
+- The backgrounds belong to the scene: the camera of the cinema mode films them like the world, its grid, its sun, its lights. Only the darker edges of the picture, an effect of the lens, stay on the screen. They are only decoration, the simulation knows nothing about them. Drawing a frame takes about as long in every ambiance (0.3 to 1.8 ms, measured), and under 40 FPS they lighten their effects: fewer lights, shorter trails  
+- Their smooth parts (gradients, sun, nebulae, clouds, hills) are painted once per size at half resolution, then slightly blurred: the browser dithers its gradients, and the camera would magnify that noise into a grid  
 - The simulation starts in Dark Mode, without the Quadtree drawn: both can be changed in the Display Options  
 - The DOM renderer (one HTML element per boid) can still be selected in the Display Options, to compare performances: the world (plankton, obstacles, currents, quadtrees) is still drawn on the Canvas under the boids  
 - The simulation adapts to the window size (resize, fullscreen) without restarting  
@@ -107,13 +113,17 @@
 ### The Cinema Mode
 - A never ending screensaver of beautiful scenes, started with the D key, the Cinema button of the Simulation Options, or the url `index.html?demo`  
 - The interface and the cursor are hidden, the page goes fullscreen and the screen is kept awake  
-- Scenes follow each other every 2.5 minutes, each in its ambiance, with a smooth transition of the parameters and a fade to black between them: Shoal (fish in the abyss), Murmuration (birds at sunset), Fireflies (comets under the aurora), Night Hunt (neon comets) and Ink (on paper)  
-- The trails are long, and a camera films shots: wide ones of the whole world (10 to 15 seconds), and medium (1.6x) or close (2.3x) ones following a flock (16 to 26 seconds). After a closer shot, it steps back now and then, or keeps on following the same flock from another distance  
-- The camera moves like critically damped springs: it speeds up and slows down smoothly and never overshoots, and it follows a flock without lagging behind, a little ahead of it. It may show a little beyond the world rather than stop abruptly at a border. Measured over 90 seconds: no jolt, the followed flock in the middle of the picture 96 % of the time  
+- Scenes follow each other every 2.5 minutes, each in its ambiance, with a smooth transition of the parameters and a fade to black between them: Shoal (fish in the abyss), Murmuration (birds at sunset), Fireflies (comets under the aurora), Night Hunt (neon comets, hunted by one or two predators only), Ink (on paper), Reef (tropical fish and sharks), Cosmos (comets among the nebulae), Storm (seabirds in the rain), Embers (sparks over a fire) and Sakura (birds among the cherry petals). The predators beyond those of a scene leave in the dark between two scenes  
+- A scene can be kept: Space, or the padlock, stays on it until it is unlocked, the camera filming it forever. The arrows ← →, or the buttons around the padlock, choose the previous or the next scene, after a fade to black, and it stays if the padlock is closed. Unlocked, a scene goes on for at least 20 seconds before the next one  
+- The url `index.html?demo=sakura` starts the cinema mode on a scene, and stays on it: its name or the one of its ambiance, whatever the case and the spaces (`?demo=night-hunt`, `?demo=sunset`)  
+- The trails are long, and a camera films shots: wide ones of the whole world (10 to 15 seconds), and medium (1.6x) or close (2.3x) ones following a flock (16 to 26 seconds), rather a large one away from the borders. After a closer shot, it steps back now and then, or keeps on following the same flock from another distance  
+- The camera moves like critically damped springs: it speeds up and slows down smoothly and never overshoots, and it follows a flock without lagging behind, a little ahead of it, gently at the start of a shot, then tighter  
+- It never shows beyond the world, without ever stopping abruptly: its target stays inside, it slows down before a border, and it only steps back as far as the picture stays inside. A flock along a border is framed on the side of the picture. When a phone turns, the camera keeps its place in the world, like the boids  
+- Measured over 90 seconds: never beyond the world, no jolt, and the followed flock off the middle only by what no camera inside the world could avoid (0.1 of the half picture on average, as the camera looks a little ahead)  
 - Between two scenes, in the dark, the camera cuts to a new shot  
 - A director keeps the ecosystem alive: new flocks and predator packs arrive from the borders when a population is low, with the genes of the current population, and reproduction stops when a population is too large or the FPS too low  
 - The seasons and the algae are always on during the cinema mode  
-- Moving the mouse, or a click, shows how to exit: D, Esc, or a second click (a second tap on a phone)  
+- Moving the mouse, a click or a tap shows the controls at the top right, for 3 seconds: previous scene, padlock with the name of the scene, next scene, exit. Hidden, they can't be clicked. It also shows how to exit: D, Esc, the cross, or a second click outside the controls (a second tap on a phone)  
 
 ### The Quadtree
 - Regular Boids and Predators detection are handled by a Quadtree  

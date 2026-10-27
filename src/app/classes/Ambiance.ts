@@ -2,7 +2,7 @@
 import { CLASSIC_PALETTE, Palette } from './BoidColor';
 import type { BoidShape } from './CanvasRenderer';
 
-export type AmbianceName = 'classic' | 'abyss' | 'sunset' | 'aurora' | 'neon' | 'paper';
+export type AmbianceName = 'classic' | 'abyss' | 'sunset' | 'aurora' | 'neon' | 'paper' | 'reef' | 'cosmos' | 'storm' | 'embers' | 'sakura';
 
 // The look of the world: its background, the colors of the families, how they glow and leave their trails
 export interface Ambiance {
@@ -19,6 +19,7 @@ export interface Ambiance {
 }
 
 // The palettes have one lightness: an ambiance has its own background, whatever the dark mode
+// The hues between two stops are mixed as numbers: from 350 to 10, the families between them would be cyan, 370 keeps them red
 const stops = (...values: [number, number, number, number][]) =>
   values.map(([lineage, hue, saturation, lightness]) => [lineage, hue, saturation, lightness, lightness] as [number, number, number, number, number]);
 
@@ -73,5 +74,53 @@ export const AMBIANCES: Record<AmbianceName, Ambiance> = {
       dead: '60, 50, 40',
     },
     plankton: { color: [90, 150, 170], alpha: 0.22 }, algae: 'rgba(70, 110, 60, 0.8)', shape: 'arrow',
+  },
+  // Tropical fish in the daylight of a reef, under the rippling light of the surface, the algae like corals
+  reef: {
+    name: 'reef', title: 'Reef', dark: true, glow: false, rainbow: false, trailFade: 0.6,
+    palette: {
+      boids: stops([-1, 225, 85, 45], [-0.4, 320, 80, 62], [0, 405, 100, 55], [1, 420, 100, 58]),
+      predators: stops([-1, 205, 18, 30], [1, 195, 15, 24]),
+      dead: '220, 240, 245',
+    },
+    plankton: { color: [255, 255, 225], alpha: 0.18 }, algae: 'rgba(255, 110, 120, 0.8)', shape: 'fish',
+  },
+  // Blue-white comets among the nebulae, hunted by red stars
+  cosmos: {
+    name: 'cosmos', title: 'Cosmos', dark: true, glow: true, rainbow: false, trailFade: 3,
+    palette: {
+      boids: stops([-1, 195, 85, 78], [0, 215, 90, 84], [1, 240, 80, 82]),
+      predators: stops([-1, 355, 90, 62], [1, 380, 95, 60]),
+    },
+    plankton: { color: [150, 120, 255], alpha: 0.15 }, algae: 'rgba(160, 140, 255, 0.55)', shape: 'comets',
+  },
+  // Pale seabirds in a stormy sky, hunted by dark ones, under a slanting rain and a distant lightning now and then
+  storm: {
+    name: 'storm', title: 'Storm', dark: true, glow: false, rainbow: false, trailFade: 0.4,
+    palette: {
+      boids: stops([-1, 215, 20, 86], [0, 210, 10, 92], [1, 190, 15, 88]),
+      predators: stops([-1, 220, 25, 8], [1, 260, 20, 11]),
+      dead: '25, 30, 40',
+    },
+    plankton: { color: [170, 190, 220], alpha: 0.18 }, algae: 'rgba(30, 38, 50, 0.8)', shape: 'bird',
+  },
+  // Sparks over the embers of a fire, hunted by white-hot ones
+  embers: {
+    name: 'embers', title: 'Embers', dark: true, glow: true, rainbow: false, trailFade: 1,
+    palette: {
+      boids: stops([-1, 12, 100, 55], [0, 28, 100, 57], [1, 46, 100, 60]),
+      predators: stops([-1, 35, 100, 85], [0, 48, 80, 93], [1, 58, 100, 88]),
+    },
+    plankton: { color: [255, 90, 30], alpha: 0.18 }, algae: 'rgba(255, 80, 20, 0.6)', shape: 'comets',
+  },
+  // Plum birds in a pale dawn, among the falling cherry petals, the algae like dark branches
+  sakura: {
+    name: 'sakura', title: 'Sakura', dark: false, glow: false, rainbow: false, trailFade: 0.8,
+    palette: {
+      boids: stops([-1, 295, 35, 30], [0, 318, 40, 32], [1, 340, 40, 36]),
+      predators: stops([-1, 350, 20, 16], [1, 370, 30, 19]),
+      dead: '120, 90, 100',
+    },
+    plankton: { color: [240, 150, 180], alpha: 0.2 }, algae: 'rgba(90, 60, 70, 0.75)', shape: 'bird',
   },
 };

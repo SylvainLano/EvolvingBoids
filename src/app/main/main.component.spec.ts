@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MainComponent } from './main.component';
 import { UserSettings, encodeLines, parseLink } from '../classes/Settings';
 import { AMBIANCES } from '../classes/Ambiance';
+import { SCENES } from '../classes/DemoMode';
 
 describe('MainComponent', () => {
   let component: MainComponent;
@@ -132,12 +133,18 @@ describe('MainComponent', () => {
     expect(component.longTrails).toBe(false);
   });
 
-  it('should film the cinema mode in smooth shots, showing little beyond the world, and fade to black between two scenes', () => {
+  it('should film the cinema mode in smooth shots, inside the world, and fade to black between two scenes', () => {
     component.demo.start(false);
     const start = performance.now();
     component.demo.update(start);
     expect(component.demo.fade).toBeGreaterThan(0.9);
     const camera = component.demo.camera;
+    const inside = () => {
+      const halfWidth = component.sim.width / 2 / camera.zoom;
+      const halfHeight = component.sim.height / 2 / camera.zoom;
+      return camera.x - halfWidth > -0.01 && camera.x + halfWidth < component.sim.width + 0.01
+        && camera.y - halfHeight > -0.01 && camera.y + halfHeight < component.sim.height + 0.01;
+    };
     const zooms = new Set<number>();
     let previous = { ...camera };
     for (let elapsed = 100; elapsed <= 60000; elapsed += 100) {
@@ -145,9 +152,7 @@ describe('MainComponent', () => {
       zooms.add(Math.round(camera.zoom * 10) / 10);
       // Never a jump: at most a few dozen pixels on the screen in a tenth of a second
       expect(Math.hypot(camera.x - previous.x, camera.y - previous.y) * camera.zoom).toBeLessThan(60);
-      const margin = (1 - component.demo.borderMargin) * component.sim.width / 2 / camera.zoom;
-      expect(camera.x).toBeGreaterThan(margin - 5);
-      expect(camera.x).toBeLessThan(component.sim.width - margin + 5);
+      expect(inside()).toBe(true);
       previous = { ...camera };
     }
     // A wide shot without zoom, then closer ones
@@ -155,6 +160,93 @@ describe('MainComponent', () => {
     expect(Math.max(...zooms)).toBeGreaterThan(1.5);
     component.demo.update(start + component.demo.sceneDuration - 500);
     expect(component.demo.fade).toBeGreaterThan(0.5);
+    component.demo.stop();
+  });
+
+  it('should keep the camera of the cinema mode inside the world when a phone turns', () => {
+    component.demo.start(false);
+    const start = performance.now();
+    const camera = () => component.demo.camera;
+    for (let elapsed = 0; elapsed <= 20000; elapsed += 100) {
+      component.demo.update(start + elapsed);
+    }
+    // From a landscape screen to a portrait one, as the window would tell the simulation
+    component.sim.resize(400, 900);
+    component.demo.update(start + 20100);
+    const halfWidth = component.sim.width / 2 / camera().zoom;
+    const halfHeight = component.sim.height / 2 / camera().zoom;
+    expect(camera().x - halfWidth).toBeGreaterThan(-0.01);
+    expect(camera().x + halfWidth).toBeLessThan(400.01);
+    expect(camera().y - halfHeight).toBeGreaterThan(-0.01);
+    expect(camera().y + halfHeight).toBeLessThan(900.01);
+    component.demo.stop();
+  });
+
+  it('should stay on a scene of the cinema mode once locked, choose another one with the arrows, and go on once unlocked', () => {
+    const demo = component.demo;
+    const key = (name: string) => component.handleKeyDown(new KeyboardEvent('keydown', { key: name }));
+    demo.start(false);
+    let now = performance.now();
+    demo.update(now);
+    const title = demo.sceneTitle;
+    key(' ');
+    expect(demo.locked).toBe(true);
+    for (let elapsed = 0; elapsed < 2 * demo.sceneDuration; elapsed += 1000) {
+      demo.update(now += 1000);
+    }
+    expect(demo.sceneTitle).toBe(title);
+    expect(demo.fade).toBe(0);
+
+    // The next scene comes after a fade to black, and stays too
+    const next = SCENES[(SCENES.findIndex(scene => scene.title === title) + 1) % SCENES.length];
+    key('ArrowRight');
+    expect(demo.chosenTitle).toBe(next.title);
+    demo.update(now += demo.fadeDuration / 2);
+    expect(demo.fade).toBeGreaterThan(0.4);
+    expect(demo.sceneTitle).toBe(title);
+    demo.update(now += demo.fadeDuration);
+    expect(demo.sceneTitle).toBe(next.title);
+    expect(component.ambiance).toBe(next.ambiance);
+    for (let elapsed = 0; elapsed < demo.sceneDuration; elapsed += 1000) {
+      demo.update(now += 1000);
+    }
+    expect(demo.sceneTitle).toBe(next.title);
+
+    // Unlocked, it goes on for a while before giving way to another one
+    key(' ');
+    expect(demo.locked).toBe(false);
+    demo.update(now += demo.unlockedRest - 2000);
+    expect(demo.sceneTitle).toBe(next.title);
+    demo.update(now += 2100);
+    expect(demo.sceneTitle).not.toBe(next.title);
+    demo.stop();
+  });
+
+  it('should start the cinema mode on the scene named by a link, and stay on it', () => {
+    component.demo.start(false, 'night-hunt');
+    expect(component.demo.sceneTitle).toBe('Night Hunt');
+    expect(component.demo.locked).toBe(true);
+    expect(component.ambiance).toBe('neon');
+    component.demo.stop();
+    component.demo.start(false, 'SAKURA');
+    expect(component.ambiance).toBe('sakura');
+    component.demo.stop();
+    component.demo.start(false, 'nowhere');
+    expect(component.demo.locked).toBe(false);
+    component.demo.stop();
+  });
+
+  it('should use the buttons of the cinema mode without leaving it', () => {
+    component.demo.start(false);
+    component.demo.onMouseMove();
+    component.demo.update(performance.now());
+    // As the frames of the component refresh its view
+    component['cdr'].detectChanges();
+    const padlock: HTMLButtonElement = fixture.nativeElement.querySelector('.demo-scene');
+    expect(padlock.textContent).toContain(component.demo.sceneTitle);
+    padlock.click();
+    expect(component.demo.locked).toBe(true);
+    expect(component.demo.active).toBe(true);
     component.demo.stop();
   });
 

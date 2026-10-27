@@ -1261,6 +1261,22 @@ export class Simulation {
     }
   }
 
+  // Boids taken out of the simulation at once, without fading away: the cinema mode does it in the dark between two scenes
+  retire(leaving: Boid[]) {
+    for (const boid of leaving) {
+      boid.quadtree.remove(boid);
+      boid.isDead = true;
+      boid.alpha = 0;
+    }
+    this.boids = this.boids.filter(boid => !leaving.includes(boid));
+    this.predators = this.predators.filter(predator => !leaving.includes(predator));
+    for (const boid of [...this.boids, ...this.predators]) {
+      if ( boid.preyLink !== null && leaving.includes(boid.preyLink) ) {
+        boid.preyLink = null;
+      }
+    }
+  }
+
   private removeBoids (numberToRemove: number, listOfBoids: Boid[]) {
     for (let i = 0; i < numberToRemove && listOfBoids.length > 0; i++) {
       const boidToRemove = listOfBoids.shift()!;

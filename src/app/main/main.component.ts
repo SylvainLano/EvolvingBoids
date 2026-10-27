@@ -183,9 +183,10 @@ export class MainComponent implements OnInit, OnDestroy {
     this.listen(document, 'visibilitychange', () => this.demo.onVisibilityChange());
     this.listen(document, 'fullscreenchange', () => this.demo.onFullscreenChange());
 
-    // The demo can be started directly with an url like index.html?demo
-    if (new URLSearchParams(window.location.search).has('demo')) {
-      this.demo.start(false);
+    // The demo can be started directly with an url like index.html?demo, or on a scene that stays: index.html?demo=sakura
+    const demo = new URLSearchParams(window.location.search).get('demo');
+    if (demo !== null) {
+      this.demo.start(false, demo);
     }
 
     this.frameRequest = requestAnimationFrame((timestamp) => this.frame(timestamp));
@@ -379,6 +380,14 @@ export class MainComponent implements OnInit, OnDestroy {
       }
     } else if ((event.key === 'e' || event.key === 'E') && !this.demo.active) {
       this.toggleExplain();
+    } else if (this.demo.active && (event.key === ' ' || event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      // Space stays on the scene of the cinema mode, the arrows choose another one
+      event.preventDefault();
+      if (event.key === ' ') {
+        this.demo.toggleLock();
+      } else {
+        this.demo.changeScene(event.key === 'ArrowRight' ? 1 : -1);
+      }
     } else if (event.key === 'd' || event.key === 'D') {
       this.demo.toggle();
     } else if (event.key === 'Escape') {
@@ -468,8 +477,12 @@ export class MainComponent implements OnInit, OnDestroy {
   }
 
   handleMouseClick(event: MouseEvent) {
+    // The buttons of the cinema mode act on their own
     if ( this.demo.active ) {
-      this.demo.onClick();
+      const target = event.target as Element | null;
+      if ( typeof target?.closest !== 'function' || target.closest('.demo-controls') === null ) {
+        this.demo.onClick();
+      }
       return;
     }
     // During a challenge, some tools can only be used a few times

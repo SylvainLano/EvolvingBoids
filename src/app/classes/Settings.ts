@@ -18,7 +18,7 @@ export const SETTINGS: readonly Setting[] = [
   // Display
   { key: 'renderer', owner: 'view', choices: ['canvas', 'dom'] },
   // Before the dark mode: an ambiance sets the dark mode that suits it, then the one of the user is applied
-  { key: 'ambiance', owner: 'view', choices: ['classic', 'abyss', 'sunset', 'aurora', 'neon', 'paper'] },
+  { key: 'ambiance', owner: 'view', choices: ['classic', 'abyss', 'sunset', 'aurora', 'neon', 'paper', 'reef', 'cosmos', 'storm', 'embers', 'sakura'] },
   { key: 'boidShape', owner: 'view', choices: ['arrow', 'fish', 'bird', 'letters', 'comets'] },
   { key: 'longTrails', owner: 'view' },
   { key: 'darkMode', owner: 'view' },

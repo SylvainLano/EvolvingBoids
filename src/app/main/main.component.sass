@@ -312,7 +312,7 @@
 .demo-cursor-hidden
   cursor: none
 
-.demo-title, .demo-hint
+.demo-title, .demo-controls
   position: absolute
   z-index: 10
   color: white
@@ -329,14 +329,72 @@
   letter-spacing: 6px
   text-transform: uppercase
 
-.demo-hint
-  top: 20px
-  right: 30px
-  font-size: 13px
-  transition-duration: 0.5s
-
 .demo-visible
   opacity: 0.6
+
+// At the top right: the scenes, the padlock to stay on one, the exit, and how to exit. Hidden, they can't be clicked
+.demo-controls
+  top: 20px
+  right: 30px
+  max-width: calc(100vw - 40px)
+  display: flex
+  flex-direction: column
+  align-items: flex-end
+  gap: 6px
+  text-align: right
+  transition-duration: 0.5s
+
+  &.demo-visible
+    opacity: 0.85
+    pointer-events: auto
+
+.demo-buttons
+  display: flex
+  gap: 4px
+
+.demo-button
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  gap: 6px
+  min-width: 32px
+  height: 32px
+  padding: 0 10px
+  border-radius: 16px
+  border: 1px solid rgba(255, 255, 255, 0.35)
+  background-color: rgba(0, 0, 0, 0.3)
+  color: inherit
+  font-family: inherit
+  font-size: 16px
+  cursor: pointer
+
+  &:hover
+    background-color: rgba(0, 0, 0, 0.5)
+
+.demo-scene
+  font-size: 12px
+  letter-spacing: 2px
+  text-transform: uppercase
+
+.demo-padlock
+  width: 13px
+  height: 13px
+
+.demo-locked
+  border-color: currentColor
+
+.demo-light .demo-button
+  border-color: rgba(43, 33, 24, 0.35)
+  background-color: rgba(255, 255, 255, 0.4)
+
+  &:hover
+    background-color: rgba(255, 255, 255, 0.65)
+
+.demo-light .demo-locked
+  border-color: currentColor
+
+.demo-hint
+  font-size: 13px
 
 // In ink on the light ambiances
 .demo-light
@@ -353,8 +411,14 @@
 
 // A touch screen has no keyboard for the keys of the tools, and no mouse to hover the faded interface
 @media (hover: none)
-  .tool-key
+  .tool-key, .demo-keys
     display: none
+
+  // Larger for a finger
+  .demo-button
+    min-width: 40px
+    height: 40px
+    border-radius: 20px
 
   .tool-bar
     opacity: 1

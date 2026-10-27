@@ -74,6 +74,11 @@ export class OptionsComponent {
           { value: 'aurora', label: 'Aurora', title: 'Glowing boids under the northern lights and the stars.' },
           { value: 'neon', label: 'Neon', title: 'Rainbow light painting on a black grid: the color of a boid is its heading.' },
           { value: 'paper', label: 'Paper', title: 'Ink on paper.' },
+          { value: 'reef', label: 'Reef', title: 'Tropical fish in the daylight of a reef, under the rippling light of the surface.' },
+          { value: 'cosmos', label: 'Cosmos', title: 'Comets among the nebulae and the drifting stars, hunted by red stars.' },
+          { value: 'storm', label: 'Storm', title: 'Pale seabirds in a stormy sky, under the rain and a distant lightning now and then.' },
+          { value: 'embers', label: 'Embers', title: 'Sparks over the embers of a fire, hunted by white-hot ones.' },
+          { value: 'sakura', label: 'Sakura', title: 'Birds in a pale dawn, among the falling cherry petals.' },
         ],
       },
       {
